@@ -84,11 +84,13 @@ def window_segments(drives, dt=1.0, horizon=15.0, burn=3.0, min_len_s=6.0, min_s
 
 
 def replay_windows(drives, params=Params(), n_runs=1, seed=0, dt=1.0, horizon=15.0, burn=3.0, min_len_s=6.0,
-                   per_run=None, min_speed=PR.MIN_SPEED):
+                   per_run=None, min_speed=PR.MIN_SPEED, speed_replay=False):
     """Multiple shooting: every `horizon` seconds the model restarts from the
     real flock state and the real dog path is replayed, so model flock and
     dog cannot drift apart. The first `burn` seconds of each window (the
     flock relaxing from the real configuration to the model's) are dropped.
+    With speed_replay, sheep move at the real flock's mean speed of each step
+    instead of the constant v_sheep.
     Returns one batched Segment (runs, N+1, 2, T) per window.
     """
     b = int(round(burn / dt))
@@ -103,9 +105,13 @@ def replay_windows(drives, params=Params(), n_runs=1, seed=0, dt=1.0, horizon=15
             mean = disp[moving].sum(0) if moving.any() else np.array([1.0, 0.0])
             with np.errstate(invalid="ignore", divide="ignore"):
                 head = np.where(moving[:, None], disp / norm, mean / np.linalg.norm(mean))
+            speed = None
+            if speed_replay:
+                speed = np.linalg.norm(np.diff(win[:N], axis=-1), axis=1).mean(0) / dt
+                speed = np.concatenate([speed[:1], speed])  # step t moves at the speed from t-1 to t
             res = simulate(replace(params, n_sheep=N, dt=dt), n_runs, None if seed is None else seed + i,
                            per_run=per_run, init={"pos_s": win[:N, :, 0][None], "vel_s": head[None]},
-                           dog_path=win[N])
+                           dog_path=win[N], speed_path=speed)
             i += 1
             pos = np.concatenate([res.pos_s, res.pos_d[:, None]], axis=1)
             seg = PR.from_positions(pos, dt, N, min_speed, d.session, f"s{d.session}d{d.index + 1}w{w}")
@@ -125,4 +131,32 @@ def unbatch(segs):
     for s in segs:
         for r in range(s.pos.shape[0]):
             out.append(PR.Segment(s.pos[r], s.vel[r], s.head[r], s.dt, s.n_sheep, s.session, f"{s.label}r{r}"))
+    return out
+
+
+def replay_windows_kernel(drives, model, coef, sigma, n_runs=1, seed=0, dt=1.0, horizon=15.0, burn=3.0,
+                          min_len_s=6.0, window_s=2.1, min_speed=PR.MIN_SPEED, speed_replay=True):
+    """Same windows as `replay_windows`, for a learned second-order kernel model.
+
+    The model is integrated at the 0.1 s tracking step from the smoothed real
+    sheep positions and velocities at each window start, with the smoothed
+    real dog path replayed, then sampled every dt.
+    """
+    from . import kernels as KN
+
+    k = int(round(dt / data.DT))
+    b = int(round(burn / dt))
+    out, i = [], 0
+    for d in drives:
+        pos, vel = KN.smooth_drive(d.pos[: N + 1], window_s=window_s)
+        _, bounds = _drive_windows(d, dt, horizon, min_len_s)
+        for w, (s, e) in enumerate(bounds):
+            s10, e10 = s * k, (e - 1) * k + 1
+            speed = np.linalg.norm(vel[:N, :, s10:e10], axis=1).mean(0) if speed_replay else None
+            P, _ = KN.simulate(model, coef, sigma, np.repeat(pos[None, :N, :, s10], n_runs, 0),
+                               np.repeat(vel[None, :N, :, s10], n_runs, 0), pos[N, :, s10:e10],
+                               seed=None if seed is None else seed + i, speed_path=speed)
+            i += 1
+            seg = PR.from_positions(P[..., ::k], dt, N, min_speed, d.session, f"s{d.session}d{d.index + 1}w{w}")
+            out.append(_trim(seg, b))
     return out

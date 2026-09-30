@@ -151,7 +151,7 @@ def _per_run_values(p, per_run, R):
     return f
 
 
-def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_path=None):
+def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_path=None, speed_path=None):
     """Run `n_runs` independent replicates of the herding model.
 
     per_run:  {name: (R,) array} for any field in PER_RUN_FIELDS, so one call
@@ -161,6 +161,8 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
               overrides the random start (any subset of keys).
     dog_path: (R|1, 2, T) or (2, T) dog positions to replay; the dog then
               ignores its rules, and n_steps = T.
+    speed_path: (R|1, T) or (T,) sheep speed for each step, replacing the
+              constant v_sheep (e.g. the real flock's speed, replayed).
     """
     p = params.resolved()
     rng = np.random.default_rng(seed)
@@ -197,6 +199,9 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
         if "vel_d" not in (init or {}):
             with np.errstate(invalid="ignore", divide="ignore"):
                 vel_d = np.nan_to_num((dog_path[..., 1] - dog_path[..., 0]) / dt)
+
+    if speed_path is not None:
+        speed_path = np.broadcast_to(np.atleast_2d(np.asarray(speed_path, float)), (R, p.n_steps))
 
     P_s, V_s, P_d, V_d, mode = _allocate(R, p)
     P_s[..., 0], V_s[..., 0], P_d[..., 0], V_d[..., 0] = pos_s, vel_s, pos_d, vel_d
@@ -245,7 +250,8 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
                 new_v = _unit((1 - a_s[:, None, None]) * vel_s + a_s[:, None, None] * new_v)
         moves = sees_dog | has_rep
         new_v = np.where(moves[..., None], new_v, vel_s)
-        new_pos_s = pos_s + np.where(moves[..., None], c3["v_sheep"] * dt * new_v, 0.0)
+        v_now = c3["v_sheep"] if speed_path is None else speed_path[:, t, None, None]
+        new_pos_s = pos_s + np.where(moves[..., None], v_now * dt * new_v, 0.0)
 
         # ---- dog (reads sheep state at t-1) ----
         if dog_path is not None:
