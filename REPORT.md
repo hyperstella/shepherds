@@ -199,3 +199,70 @@ start of each window the model restarts from the real sheep positions and headin
 
 These gaps persist at dt = 0.2 s and with the sheep speed set to the measured 1.29 m/s. They are
 the targets for Phase 3 (calibration) and Phase 4 (learned interaction kernels).
+
+## Phase 4: learning the interaction laws from the tracks
+
+`shepherd/kernels.py` fits a second-order interacting-particle model for the sheep, with the dog
+as an external agent. Each interaction is a nonparametric kernel of distance, built from
+piecewise-linear "hat" functions:
+- φ_E: attraction/repulsion;
+- φ_A: alignment;
+- φ_D: flight from the dog;
+- ψ_V: response to the dog's velocity;
+- ψ_L: flight scaled by how fast the dog is closing in.
+
+Fitting method:
+- **Integral form:** the fit matches the change in each sheep's velocity over 1 s against the
+  time-integrated forces, rather than differentiating noisy tag positions twice.
+- **Smoothing:** a 2.1 s Savitzky–Golay filter.
+- **Penalty:** second-difference smoothness, with its weight chosen by leave-one-session-out
+  cross-validation.
+
+Run `experiments/fit_kernels.py` to reproduce this section.
+
+### What explains the sheep's accelerations (Q3)
+
+Scores are leave-one-session-out R² of the velocity change over 1 s. The whole-flock part is 55% of
+the variance.
+
+| Model | Total | Whole-flock part | Within-flock part |
+|---|---|---|---|
+| All terms plus self-propulsion | 0.19 | 0.27 | 0.10 |
+| **Main model** (E, A, D, DV, DL; flock speed external) | 0.12 | 0.14 | 0.09 |
+| No alignment | 0.12 | 0.14 | 0.09 |
+| No attraction/repulsion | 0.07 | 0.14 | **−0.02** |
+| Dog position only (no dog-velocity terms) | 0.06 | **0.02** | 0.09 |
+| No dog terms | 0.05 | 0.00 | 0.10 |
+| Topological (4 or 7 nearest neighbours) | 0.10–0.11 | 0.13–0.14 | 0.05–0.07 |
+
+- **Attraction/repulsion carries the structure within the flock.** Removing it takes the
+  within-flock R² from 0.09 to below zero. The kernel changes sign from repulsion to attraction at
+  **r = 1.25 m, the sheep's body length (1.2 m)**.
+- **Alignment adds nothing measurable** (0.117 with or without it), and it is not identifiable
+  (see Q1). This agrees with the paper's caveat that velocity matching has little direct support.
+- **The flock as a whole responds to the dog's motion, not just its position.** The dog-velocity
+  and closing-speed kernels lift the whole-flock R² from 0.02 to 0.14. ψ_V is *negative*: sheep
+  accelerate against the dog's lateral motion, so when the collie swings right the flock veers
+  left. This is anticipatory flight, consistent with the turn-away in Fig 4a.
+- **Distance-based (metric) interactions fit better than nearest-k (topological) ones.**
+- **The flock's own speed regulation is not identifiable.** Every fit gives *negative* friction,
+  and in the data the flock's speed barely depends on dog distance (1.2–1.3 m/s from 0 to 8 m).
+  In a synthetic check the method did recover a restoring speed term when one existed (shrunk
+  30–50% toward zero), so its absence in the real fit is a property of the data. The flock's
+  overall speed is set from outside, by the shepherd and dog. All forward simulations therefore
+  **replay the real flock's mean speed**, just as they replay the dog, for every model family.
+
+### Identifiability (Q1)
+
+These results use synthetic flocks from known kernels (the real-data fit), driven by the real dog
+paths. Tag-like noise was added at 2 Hz and interpolated to 10 Hz, then the fitting pipeline was
+run unchanged. Errors are relative L2, weighted by where data actually lie. See
+`results/figures/identifiability.png`.
+
+- **φ_E** (attraction/repulsion) is recovered well: error 0.06–0.15, falling with more drives.
+- **The dog kernels** (φ_D, ψ_V, ψ_L) are recovered with errors of about 0.25–0.35. These level
+  off rather than falling with more data, which points to a bias from the flock-speed input the
+  model does not describe.
+- **φ_A (alignment) is not identifiable.** Its error is 0.85–1.4 even with all 29 drives, and it
+  stays above 1 even without tag noise. In a cohesive, polarized flock, velocity differences
+  between neighbours are small and collinear with the attraction term.
