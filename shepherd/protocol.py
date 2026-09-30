@@ -134,12 +134,24 @@ def _turn(head, lag):
     return np.where(ok, ang, np.nan)
 
 
-def _slope0(x, y):
-    """Least-squares slope through the origin along the last axis, ignoring NaN."""
+SLOPE_LIMIT = 10.0  # the data's Fig-4 slopes are about -0.8 and +1.0
+
+
+def _slope0(x, y, min_n=5, min_mean_sq=1e-2):
+    """Least-squares slope through the origin along the last axis, ignoring NaN.
+
+    NaN when the fit is degenerate: fewer than min_n samples, almost no spread
+    in x (e.g. the dog exactly behind the flock for a whole window), or a
+    slope beyond +-SLOPE_LIMIT.
+    """
     ok = np.isfinite(x) & np.isfinite(y)
+    n = ok.sum(-1)
     x, y = np.where(ok, x, 0.0), np.where(ok, y, 0.0)
+    sxx = (x * x).sum(-1)
     with np.errstate(invalid="ignore", divide="ignore"):
-        return (x * y).sum(-1) / (x * x).sum(-1)
+        b = (x * y).sum(-1) / sxx
+    bad = (n < min_n) | (sxx < min_mean_sq * np.maximum(n, 1)) | ~(np.abs(b) <= SLOPE_LIMIT)
+    return np.where(bad, np.nan, b)
 
 
 def _autocorr(x, lag):

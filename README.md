@@ -52,7 +52,12 @@ matches the Python version's statistics.
 | `shepherd/data.py` | loads `sheepR.dat`; ports `pre_ana.m`, `pre_ini_ana.m`, `drivs_dat.m` |
 | `shepherd/metrics.py` | cohesion, polarization, elongation, flock frame, viewing angles, turning rates |
 | `shepherd/network.py` | directional cross-correlation, leader–follower networks, d_i vs indegree |
-| `shepherd/model.py` | the herding model: vectorized `simulate` plus a literal reference port |
+| `shepherd/model.py` | the herding model: vectorized `simulate` (per-run parameters, dog/speed replay, dt/τ) plus a literal reference port |
+| `shepherd/protocol.py` | one analysis protocol for data and models: segments, summaries, sheep-level hierarchy, bootstrap, surrogates |
+| `shepherd/scenario.py` | simulated drives matched to real ones: the real dog replayed in 15 s windows that restart from the real flock |
+| `shepherd/abc.py` | NumPy ABC: Sobol reference tables, regression adjustment, coverage checks |
+| `shepherd/kernels.py` | learned interaction kernels: integral-form least squares, CV, synthetic data, forward simulation |
+| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models` (see REPORT.md) |
 | `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data) |
 | `reproduce.py` | regenerates the paper's Figs 1b–6 and the summary numbers |
 | `data/upstream/` | the authors' data, `.mat` files (used to verify the port) and MATLAB model, from commit `2c02a88` |

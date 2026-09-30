@@ -266,3 +266,87 @@ run unchanged. Errors are relative L2, weighted by where data actually lie. See
 - **φ_A (alignment) is not identifiable.** Its error is 0.85–1.4 even with all 29 drives, and it
   stays above 1 even without tag noise. In a cohesive, polarized flock, velocity differences
   between neighbours are small and collinear with the attraction term.
+
+## Phase 3: calibrating the published model (NumPy ABC)
+
+`shepherd/abc.py` together with `experiments/build_table.py` fits the Strömbom/Jadhav sheep rules
+to the real drives. Every simulation uses the same inputs as the data: the real dog's path and the
+real flock's mean speed, in 15 s windows that restart from the real flock.
+
+**Method:**
+- Sobol reference tables: 65,536 + 32,768 parameter sets at dt = 1 s (M1), and
+  32,768 + 16,384 at dt = 0.2 s with heading relaxation (M1τ). Each table takes about 5–8 minutes
+  on 10 cores.
+- Rejection ABC keeping the closest 1%, with a local-linear regression adjustment.
+- 15 summary statistics; the hierarchy is deliberately excluded.
+- A coverage check with 50 pseudo-observed rows: 90% intervals contain the truth 86–96% of the
+  time, so the posteriors are well calibrated.
+
+**Posterior (median and 90% CI):**
+
+| Parameter | M1 (dt = 1 s) | M1τ (dt = 0.2 s) |
+|---|---|---|
+| Personal space r_rep | 0.87 m (0.31–1.58) | **0.34 m (0.22–0.47)** |
+| Notice radius for the dog r_dog | **8.6 m (7.4–10.1)** | **9.8 m (7.6–12.0)** |
+| Heading relaxation τ_s | — | 0.21 s (0.20–0.22), at the prior floor (= dt) |
+| Alignment weight w_ali (w_rep = 2 fixed) | ≈ 900, at the upper prior edge | ≈ 900, at the upper prior edge |
+
+The spacing and dog-notice radii are well identified (contraction 0.73–0.97). The individual
+weights are only weakly identified, because only their ratios matter, and the fit pushes the
+alignment weight to the prior's edge. In effect, the calibrated model is "copy a random
+neighbour's heading almost instantly, with very little repulsion". A reparametrization that fixes
+the alignment weight instead would be cleaner, and is on the to-do list.
+
+## Phase 5: held-out prediction (Q2) and the hierarchy test (Q3)
+
+Run `experiments/compare_models.py` to reproduce this section; it writes
+`results/compare_models.json` and `results/figures/heldout_hierarchy.png`.
+
+**Q2, predicting unseen sessions.** Each model is scored with leave-one-session-out on the 15
+summary statistics, as an RMS of errors in units of the data's window-to-window SD. The
+training-data average (0.59–0.63) is the floor.
+
+| Model | dt = 1 s | dt = 0.2 s |
+|---|---|---|
+| Published (M0), constant speed | 3.13 | — |
+| Published, real flock speed | 3.18 | 3.69 |
+| Published, body-length spacing | 2.10 | — |
+| **Calibrated M1 / M1τ** | **1.33** | **1.03** |
+| Learned kernels + 3 calibrated gains | — | 1.42 |
+
+- **Calibration cuts the published model's error by 60–70%.**
+- **On summary statistics, the calibrated parametric model beats the learned-kernel model.** The
+  learned flock is too loosely aligned: its polarization error is 2.5 SD.
+- **The learned kernels are too weak:** the calibrated gain on attraction/repulsion is 3.9 (90% CI
+  1.9–7.8). This matches the shrinkage toward zero seen in the synthetic study (noisy velocities
+  on both sides of the regression).
+
+**Q3, front-to-back leadership.** All rows use the same 15 s windows at dt = 0.2 s and the fair
+protocol. ρ is the sheep-level Spearman correlation between the number of followers and front
+position; the CIs come from a session bootstrap.
+
+| Real flock and models | ρ (95% CI) |
+|---|---|
+| **Real flock** (time-shift surrogate p = 0.005) | **0.30 (0.23–0.34)** |
+| Published model | 0.09 (−0.03–0.15) |
+| Calibrated M1τ (posterior draws) | 0.08 (0.05–0.11) |
+| **Learned kernels (posterior draws)** | **0.27 (0.22–0.32)** |
+| Learned, dog removed (flock speed replayed; P drops to 0.54) | 0.21 (0.17–0.27) |
+| Learned, flock *velocity* replayed | 0.45 (0.33–0.58) |
+| Learned, flock *velocity* replayed, dog removed | 0.45 (0.36–0.57) |
+
+- **Matching the summary statistics is not enough.** Even calibrated, the Strömbom/Jadhav model
+  shows no front-to-back hierarchy. Its sheep copy randomly chosen neighbours, which has no
+  front/back asymmetry.
+- **The learned kernels reproduce the real flock's hierarchy** (0.27 vs 0.30), although nothing in
+  the fit used hierarchy statistics.
+- **With the flock's collective motion held fixed, the dog adds nothing to the hierarchy** (0.45
+  with vs 0.45 without). In the learned model, leadership comes from sheep–sheep
+  attraction/repulsion in a flock moving in one direction; the dog's role is to steer the flock as
+  a whole. This refines the paper's conclusion that the dog is needed: their null model lost
+  coherent motion entirely.
+- **Caveats:**
+  - The velocity-replay runs are less polarized than the real flock (P ≈ 0.65–0.68 vs 0.89) and
+    overshoot ρ.
+  - Each window starts from the real configuration, so front/back positions are partly inherited.
+  - One flock and one dog.

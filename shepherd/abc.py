@@ -139,6 +139,17 @@ def simulate_table_kernel(theta, model, c_base, dt=1.0, seed=0, chunk=128, worke
     return np.concatenate(parts, axis=0)
 
 
+def sanitize(table, stats=PR.SUMMARY_KEYS):
+    """Apply the current degenerate-fit rule for Fig-4 slopes to a stored table."""
+    table = np.array(table, dtype=float, copy=True)
+    for k in ("slope_4a", "slope_4b"):
+        if k in stats:
+            j = list(stats).index(k)
+            v = table[..., j]
+            v[~(np.abs(v) <= PR.SLOPE_LIMIT)] = np.nan
+    return table
+
+
 def aggregate(table, durations, mask=None):
     """Duration-weighted mean over windows (ignoring NaN): (..., W, K) -> (..., K)."""
     w = np.asarray(durations, float)

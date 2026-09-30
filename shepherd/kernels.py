@@ -275,13 +275,17 @@ def kernel_curves(model, c, r_pair=np.linspace(0, 8, 161), r_dog=np.linspace(0, 
 
 # ------------------------------------------------------------------ simulation
 
-def simulate(model, c, sigma, pos0, vel0, dog_path, dt=data.DT, seed=None, v_max=4.0, speed_path=None):
+def simulate(model, c, sigma, pos0, vel0, dog_path, dt=data.DT, seed=None, v_max=4.0, speed_path=None,
+             mean_vel_path=None):
     """Euler-Maruyama integration with the dog path replayed.
 
     pos0, vel0: (R, N, 2); dog_path: (2, T); c: (P,) or (R, P); sigma: scalar or
     (R,). If speed_path (T,) is given, all
     sheep velocities are rescaled each step so the flock's mean speed follows
     it (the flock's overall speed is then an external input, like the dog).
+    If mean_vel_path (2, T) is given instead, the flock's mean velocity
+    (direction and speed) is imposed each step and only motion relative to the
+    flock comes from the model.
     Returns pos, vel of shape (R, N+1, 2, T) with the dog last.
     """
     rng = np.random.default_rng(seed)
@@ -305,6 +309,8 @@ def simulate(model, c, sigma, pos0, vel0, dog_path, dt=data.DT, seed=None, v_max
         if speed_path is not None:
             mean_sp = np.linalg.norm(v, axis=-1).mean(-1)[:, None, None]
             v = v * (speed_path[t + 1] / np.maximum(mean_sp, 1e-9))
+        if mean_vel_path is not None:
+            v = v - v.mean(-2, keepdims=True) + mean_vel_path[:, t + 1]
         x = x + dt * v
     return P, V
 

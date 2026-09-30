@@ -39,7 +39,12 @@ ACCEPT = 0.01
 
 
 def load(name):
-    return dict(np.load(TABLES / f"{name}.npz", allow_pickle=False))
+    """Load a table, applying the current degenerate-slope rule to stored summaries."""
+    t = dict(np.load(TABLES / f"{name}.npz", allow_pickle=False))
+    for k in list(t):
+        if k.startswith("tab") or k == "meta_obs":
+            t[k] = ABC.sanitize(t[k])
+    return t
 
 
 def data_scale(meta):
@@ -59,13 +64,13 @@ def heldout_param(tab, name):
         tr, te = sess != s, sess == s
         S_tr = ABC.aggregate(sims, dur, tr)
         post = ABC.fit(th, S_tr, ABC.aggregate(obs[None], dur, tr)[0], ABC.mad_scale(S_tr), priors, ACCEPT)
-        out[int(s)] = ABC.aggregate(sims[post.idx], dur, te).mean(0)
+        out[int(s)] = np.nanmedian(ABC.aggregate(sims[post.idx], dur, te), axis=0)
     return out
 
 
 def heldout_fixed(tab):
     sess, dur = tab["meta_sessions"], tab["meta_durations"]
-    return {int(s): ABC.aggregate(tab["tab"][..., COLS], dur, sess == s).mean(0) for s in np.unique(sess)}
+    return {int(s): np.nanmedian(ABC.aggregate(tab["tab"][..., COLS], dur, sess == s), axis=0) for s in np.unique(sess)}
 
 
 def heldout_hybrid(tab):
@@ -78,7 +83,7 @@ def heldout_hybrid(tab):
         tr, te = sess != s, sess == s
         S_tr = ABC.aggregate(sims, dur, tr)
         post = ABC.fit(th, S_tr, ABC.aggregate(obs[None], dur, tr)[0], ABC.mad_scale(S_tr), HYBRID_PRIORS, 0.03)
-        out[int(s)] = ABC.aggregate(sims[post.idx], dur, te).mean(0)
+        out[int(s)] = np.nanmedian(ABC.aggregate(sims[post.idx], dur, te), axis=0)
     return out
 
 
@@ -180,6 +185,14 @@ def main():
     res["hierarchy"]["learned, dog removed (polarized null)"] = hierarchy_of(SC.unbatch(segs_null))
     res["hierarchy"]["learned, dog removed: polarization"] = float(np.nanmean(
         [np.nanmean(PR.summaries(s)["P_med"]) for s in segs_null]))
+    # Fairer decomposition: impose the real flock's mean velocity in both runs,
+    # so the flock moves exactly as the real one and only motion relative to
+    # the flock comes from the model. Any difference is the dog's effect on
+    # individual sheep, beyond steering the flock as a whole.
+    for label, cf in (("learned, flock velocity replayed", coef), ("learned, flock velocity replayed, dog removed", no_dog)):
+        segs = SC.replay_windows_kernel(drives, km, cf, g["sigma"], n_draw, 7, 0.2, velocity_replay=True)
+        res["hierarchy"][label] = hierarchy_of(SC.unbatch(segs))
+        res["hierarchy"][label + ": polarization"] = float(np.nanmean([np.nanmean(PR.summaries(s)["P_med"]) for s in segs]))
     for k, v in res["hierarchy"].items():
         if isinstance(v, dict):
             print(f"{k:40s} rho {v['spearman']:+.3f} CI {np.round(v['spearman_ci95'], 3)}  dog rank {v.get('dog_rank')}")
@@ -204,17 +217,25 @@ def plot(res):
     vals = [h[k]["spearman"] for k in labels]
     ci = np.array([h[k]["spearman_ci95"] for k in labels])
     x = np.arange(len(labels))
-    axs[1].bar(x, vals, color=["#52514e", "#eb6834", "#2a78d6", "#1baf7a", "#b8b7b1"][: len(labels)])
+    axs[1].bar(x, vals, color=["#52514e", "#eb6834", "#2a78d6", "#1baf7a", "#b8b7b1", "#1baf7a", "#b8b7b1"][: len(labels)])
     axs[1].errorbar(x, vals, yerr=np.abs(ci.T - vals), fmt="none", ecolor="#17201a", capsize=3)
     axs[1].axhline(0, color="#52514e", lw=0.8)
-    axs[1].set_xticks(x, [l.replace(" (", "\n(").replace(", ", ",\n") for l in labels], fontsize=8)
+    short = {"data": "Real\nflock", "M0s published": "Published\nmodel", "M1tau posterior": "Calibrated\nM1τ",
+             "learned posterior": "Learned", "learned, dog removed (polarized null)": "Learned,\nno dog",
+             "learned, flock velocity replayed": "Learned,\nflock vel.\nreplayed",
+             "learned, flock velocity replayed, dog removed": "Learned,\nflock vel.\nreplayed,\nno dog"}
+    axs[1].set_xticks(x, [short.get(l, l) for l in labels], fontsize=8)
     axs[1].set_ylabel("Sheep-level ρ(followers, front position)")
     axs[1].set_title("Q3  Front-to-back leadership, same windows and protocol", fontsize=10)
     for ax in axs:
         ax.spines[["top", "right"]].set_visible(False)
+    fig.set_size_inches(18, 5)
     fig.tight_layout()
     fig.savefig(OUT / "figures" / "heldout_hierarchy.png", dpi=110)
 
 
 if __name__ == "__main__":
-    main()
+    if "--plot-only" in sys.argv:
+        plot(json.loads((OUT / "compare_models.json").read_text()))
+    else:
+        main()
