@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+viz/preview.html
+results/tables/
+.claude/
+.DS_Store

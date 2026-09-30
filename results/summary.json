@@ -1,0 +1,125 @@
+{
+  "data": {
+    "n_sessions": 9,
+    "n_drives": 29,
+    "drive_seconds_total": 855.6,
+    "mean_speed_sheep": 1.2857029212157174,
+    "mean_speed_barycenter": 1.1701491614150703,
+    "mean_speed_dog": 1.468222751643358,
+    "peak_speed_barycenter": 0.9,
+    "peak_speed_dog": 0.7000000000000001,
+    "cohesion_mean": 1.210811852307079,
+    "cohesion_sd": 0.3408795731866339,
+    "polarization_mean": 0.850333090900044,
+    "polarization_sd": 0.16605058391193833,
+    "polarization_mode": 0.94,
+    "elongation_mode": 0.8000000000000002,
+    "elongation_median": 1.0185275804849505,
+    "dBD_p10_p90": [
+      3.355140870794921,
+      7.358350803554569
+    ],
+    "yRD_p10_p90": [
+      0.5577935170111441,
+      5.109122777549047
+    ],
+    "frac_dog_behind_rear_sheep": 0.9394010294805802,
+    "psiBD_frac_within_30deg_of_rear": 0.6074941451990632,
+    "xD_p5_p95": [
+      -4.66327214946058,
+      3.5029639318668657
+    ],
+    "corr_psiBD_vs_turnB_on_flanks": -0.28474562095324546,
+    "corr_psiDB_vs_turnD": 0.5699859233539757,
+    "pearson_di_indegree": 0.8739956643243311,
+    "pearson_di_indegree_p": 4.380808252603365e-05,
+    "indegree_levels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "dog_mean_indegree": 1.0689655172413792,
+    "sheep_mean_indegree_range": [
+      4.551724137931035,
+      10.206896551724139
+    ],
+    "dog_rank_by_mean_indegree_of_15": 15
+  },
+  "model": {
+    "runs": 300,
+    "steps": 370,
+    "seed": 2024,
+    "dog_mode_fraction": {
+      "drive": 0.9529268292682926,
+      "collect": 0.0,
+      "slow": 0.04707317073170732
+    },
+    "cohesion_mean_all": 2.8272501847056213,
+    "cohesion_mean_drive": 2.799478632219095,
+    "polarization_mean_all": 0.8243144721191957,
+    "polarization_mean_drive": 0.8277371879813946,
+    "elongation_mode_all": 0.6000000000000001,
+    "elongation_mode_drive": 0.6000000000000001,
+    "frac_dog_behind_rear_sheep_all": 0.9516396396396396,
+    "frac_dog_behind_rear_sheep_drive": 0.9657215444264331,
+    "runs_with_edges": 300,
+    "spearman_di_indegree": 0.9636363636363635,
+    "pearson_di_indegree": 0.9534578986560222,
+    "indegree_levels": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "upstream_csv_spearman": 0.9912087912087912,
+    "di_p5_p95": [
+      -1.0215212528773934,
+      1.1249511891950166
+    ],
+    "dog_mean_indegree": 1.1266666666666667,
+    "frac_runs_dog_lowest": 0.8566666666666667,
+    "yRD_p10_p90_drive": [
+      3.295316212334976,
+      6.7412556130818135
+    ],
+    "dBD_p10_p90": [
+      6.308120293347797,
+      8.935266220384444
+    ],
+    "psiBD_frac_within_30deg_of_rear": 0.9651711711711711
+  },
+  "null_model": {
+    "edges_per_run_mean": 0.0,
+    "polarization_mean": 0.31715325996988447
+  },
+  "paper": {
+    "mean_speed_barycenter": 1.3,
+    "mean_speed_dog": 1.5,
+    "peak_speed_barycenter": 0.9,
+    "peak_speed_dog": 0.8,
+    "cohesion_mean": 1.21,
+    "cohesion_sd": 0.34,
+    "polarization_mean": 0.85,
+    "polarization_sd": 0.17,
+    "elongation_mode": 0.8,
+    "pearson_di_indegree": 0.85,
+    "n_drives": 26
+  }
+}
