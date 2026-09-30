@@ -60,3 +60,15 @@ def test_surrogate_shapes(drives):
     segs = PR.segments_from_drives(drives[:4], dt=0.2)
     out = PR.timeshift_surrogate(segs, n_surr=3, seed=0)
     assert out["spearman"].shape == (3,) and out["edges_per_segment"].shape == (3,)
+
+
+def test_replay_windows_align_with_data_windows(drives):
+    from shepherd import scenario as SC
+    from shepherd.model import Params
+
+    real = SC.window_segments(drives[:5], dt=0.5, horizon=10.0, burn=2.0)
+    sim = SC.replay_windows(drives[:5], Params(), n_runs=2, seed=0, dt=0.5, horizon=10.0, burn=2.0)
+    assert [s.label for s in real] == [s.label for s in sim]
+    for r, s in zip(real, sim):
+        assert s.pos.shape == (2, *r.pos.shape)
+        np.testing.assert_allclose(s.pos[:, -1], np.broadcast_to(r.pos[-1], s.pos[:, -1].shape))  # dog replayed

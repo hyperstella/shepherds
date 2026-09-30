@@ -173,3 +173,29 @@ Run `experiments/protocol_check.py` to reproduce this section; it writes
 at sub-second lags, and the published model does not reproduce it once it is analysed like the
 data. That makes the question of whether a *learned* interaction model can reproduce it (Q3) a
 sharp test.
+
+## Phase 2: the published model driven by the real dog
+
+`shepherd/scenario.py` replays the collie's recorded path, and starts each simulated flock from
+the real flock's state, so model and data face exactly the same dog.
+
+**Full-drive replay does not work.** Over a 30–100 s drive the model flock drifts from the real
+flock's route. The recorded dog then drifts away from the model flock (median dog–flock distance
+12.8 m vs 5.2 m) and leaves the sheep's 12 m notice radius, so the model sheep stop.
+
+**The harness therefore uses multiple shooting.** Each drive is cut into 15 s windows. At the
+start of each window the model restarts from the real sheep positions and headings, and the first
+3 s are dropped as burn-in. The data statistics use exactly the same windows. Run
+`experiments/replay_check.py` to reproduce this.
+
+| Statistic (15 s windows, dt = 1 s) | Real flock | Published model |
+|---|---|---|
+| Nearest-neighbour distance (median) | **0.51 m** | 1.23 m |
+| Cohesion C (median) | **1.19 m** | 2.63 m |
+| Elongation E (median) | **1.12** | 0.68 |
+| Polarization P (median) | **0.94** | 0.78 |
+| Dog–barycenter distance d_BD (median) | 5.2 m | 7.4 m |
+| Share of time dog within 30° of straight behind | 0.58 | 0.74 |
+
+These gaps persist at dt = 0.2 s and with the sheep speed set to the measured 1.29 m/s. They are
+the targets for Phase 3 (calibration) and Phase 4 (learned interaction kernels).

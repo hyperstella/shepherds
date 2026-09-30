@@ -15,8 +15,14 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-# Dog behaviour modes recorded per step.
-INIT, DRIVE, COLLECT, SLOW = 0, 1, 2, 3
+# Dog behaviour modes recorded per step. REPLAY: the dog follows a given path.
+INIT, DRIVE, COLLECT, SLOW, REPLAY = 0, 1, 2, 3, 4
+
+# Float parameters that `simulate` accepts per run (see `per_run`).
+PER_RUN_FIELDS = (
+    "r_rep", "r_dog", "v_sheep", "v_dog", "w_inertia", "w_rep", "w_dog", "noise", "w_att", "w_ali",
+    "dog_slow_step", "l_sep", "l_drive", "l_collect", "tau_s", "tau_d", "noise_dog",
+)
 
 
 @dataclass(frozen=True)
@@ -45,6 +51,12 @@ class Params:
     # Null model (paper Supp. Sec.): no dog; sheep always interact socially and
     # move at constant speed. Only supported by `simulate`.
     dog_present: bool = True
+    # Extensions (only in `simulate`). With the defaults the published model
+    # is reproduced exactly.
+    dt: float = 1.0  # seconds per step; positions advance v * dt
+    tau_s: float | None = None  # sheep heading relaxation time (None = dt: jump to the desired heading)
+    tau_d: float | None = None  # same for the dog
+    noise_dog: float | None = None  # dog heading noise (None = noise)
 
     def resolved(self):
         n = self.n_sheep
@@ -95,11 +107,14 @@ def _draw_step(rng, R, p):
     )
 
 
-def _init_state(d, p):
+def _init_state(d, p, f=None):
+    """Random start near a point box_length from the target. f: per-run values."""
+    r_rep = p.r_rep if f is None else f["r_rep"][:, None, None]
+    r_dog = p.r_dog if f is None else f["r_dog"][:, None]
     side = p.box_length * np.stack([np.cos(2 * np.pi * d["theta_pos"]), np.sin(2 * np.pi * d["theta_pos"])], -1)
     side = side + np.asarray(p.target)
-    pos_s = side[:, None] - 3 * p.r_rep * d["off_s"]
-    pos_d = side - 3 * p.r_dog * d["off_d"]
+    pos_s = side[:, None] - 3 * r_rep * d["off_s"]
+    pos_d = side - 3 * r_dog * d["off_d"]
     ts, td = 2 * np.pi * d["theta_s"], 2 * np.pi * d["theta_d"]
     vel_s = np.stack([np.cos(ts), np.sin(ts)], -1)
     vel_d = np.stack([np.cos(td), np.sin(td)], -1)
@@ -117,15 +132,72 @@ def _allocate(R, p):
     )
 
 
-def simulate(params=Params(), n_runs=1, seed=None):
-    """Run `n_runs` independent replicates of the herding model."""
+def _per_run_values(p, per_run, R):
+    """Float parameters as (R,) arrays: per_run overrides, else the Params value.
+    l_* defaults follow the (possibly per-run) r_rep, as in the original code."""
+    per_run = dict(per_run or {})
+    unknown = set(per_run) - set(PER_RUN_FIELDS)
+    if unknown:
+        raise ValueError(f"not per-run parameters: {sorted(unknown)}")
+    raw = {k: per_run.get(k, getattr(p, k)) for k in PER_RUN_FIELDS}
+    f = {k: np.broadcast_to(np.asarray(v, float), (R,)).copy() for k, v in raw.items() if v is not None}
+    n = p.n_sheep
+    f.setdefault("l_sep", f["r_rep"] * n ** (2 / 3))
+    f.setdefault("l_drive", f["r_rep"] * np.sqrt(n))
+    f.setdefault("l_collect", f["r_rep"].copy())
+    f.setdefault("tau_s", np.full(R, p.dt))
+    f.setdefault("tau_d", np.full(R, p.dt))
+    f.setdefault("noise_dog", f["noise"].copy())
+    return f
+
+
+def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_path=None):
+    """Run `n_runs` independent replicates of the herding model.
+
+    per_run:  {name: (R,) array} for any field in PER_RUN_FIELDS, so one call
+              can evaluate many parameter sets (random draws are identical
+              across parameter values, so runs are comparable).
+    init:     {"pos_s": (R|1, N, 2), "vel_s": ..., "pos_d": (R|1, 2), "vel_d": ...}
+              overrides the random start (any subset of keys).
+    dog_path: (R|1, 2, T) or (2, T) dog positions to replay; the dog then
+              ignores its rules, and n_steps = T.
+    """
     p = params.resolved()
     rng = np.random.default_rng(seed)
     R, N = n_runs, p.n_sheep
+    f = _per_run_values(params, per_run, R)  # unresolved, so l_* defaults follow per-run r_rep
+    c3 = {k: v[:, None, None] for k, v in f.items()}  # for (R, N, 2) arrays
+    c2 = {k: v[:, None] for k, v in f.items()}  # for (R, N) and (R, 2) arrays
     target = np.asarray(p.target, dtype=float)
     ar, an = np.arange(R)[:, None], np.arange(N)[None, :]
+    dt = p.dt
+    a_s, a_d = np.minimum(1.0, dt / f["tau_s"]), np.minimum(1.0, dt / f["tau_d"])
+    relax_s, relax_d = bool(np.any(a_s < 1)), bool(np.any(a_d < 1))
 
-    pos_s, vel_s, pos_d, vel_d = _init_state(_draw_init(rng, R, p), p)
+    if dog_path is not None:
+        dog_path = np.asarray(dog_path, float)
+        if dog_path.ndim == 2:
+            dog_path = dog_path[None]
+        dog_path = np.broadcast_to(dog_path, (R, *dog_path.shape[1:]))
+        p = replace(p, n_steps=dog_path.shape[-1])
+
+    pos_s, vel_s, pos_d, vel_d = _init_state(_draw_init(rng, R, p), p, f)
+    for k, v in (init or {}).items():
+        v = np.broadcast_to(np.asarray(v, float), {"pos_s": pos_s, "vel_s": vel_s, "pos_d": pos_d, "vel_d": vel_d}[k].shape)
+        if k == "pos_s":
+            pos_s = v.copy()
+        elif k == "vel_s":
+            vel_s = v.copy()
+        elif k == "pos_d":
+            pos_d = v.copy()
+        elif k == "vel_d":
+            vel_d = v.copy()
+    if dog_path is not None:
+        pos_d = dog_path[..., 0].copy()
+        if "vel_d" not in (init or {}):
+            with np.errstate(invalid="ignore", divide="ignore"):
+                vel_d = np.nan_to_num((dog_path[..., 1] - dog_path[..., 0]) / dt)
+
     P_s, V_s, P_d, V_d, mode = _allocate(R, p)
     P_s[..., 0], V_s[..., 0], P_d[..., 0], V_d[..., 0] = pos_s, vel_s, pos_d, vel_d
 
@@ -137,7 +209,7 @@ def simulate(params=Params(), n_runs=1, seed=None):
         dist = np.linalg.norm(r_ij, axis=-1)
         with np.errstate(invalid="ignore", divide="ignore"):
             u_ij = r_ij / dist[..., None]
-        near = (dist < p.r_rep) & ~np.eye(N, dtype=bool)
+        near = (dist < c3["r_rep"]) & ~np.eye(N, dtype=bool)
         has_rep = near.any(-1)
         with np.errstate(invalid="ignore"):
             rep = -_unit(np.where(near[..., None], u_ij, 0).sum(2))
@@ -145,8 +217,9 @@ def simulate(params=Params(), n_runs=1, seed=None):
 
         to_dog = pos_d[:, None, :] - pos_s
         dog_dist = np.linalg.norm(to_dog, axis=-1)
-        sees_dog = dog_dist <= p.r_dog
-        away = -to_dog / dog_dist[..., None]
+        sees_dog = dog_dist <= c2["r_dog"]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            away = -to_dog / dog_dist[..., None]
         if not p.dog_present:
             sees_dog = np.ones_like(sees_dog)
             away = np.zeros_like(away)
@@ -161,37 +234,50 @@ def simulate(params=Params(), n_runs=1, seed=None):
         noise = np.stack([np.cos(th), np.sin(th)], -1)
 
         active = (
-            p.w_inertia * vel_s + p.w_rep * rep + p.w_dog * away
-            + p.w_att * s_att + p.noise * noise + p.w_ali * s_ali
+            c3["w_inertia"] * vel_s + c3["w_rep"] * rep + c3["w_dog"] * away
+            + c3["w_att"] * s_att + c3["noise"] * noise + c3["w_ali"] * s_ali
         )
-        grazing = p.w_inertia * vel_s + p.w_rep * rep
+        grazing = c3["w_inertia"] * vel_s + c3["w_rep"] * rep
         with np.errstate(invalid="ignore"):
             new_v = np.where(sees_dog[..., None], _unit(active), _unit(grazing))
+        if relax_s:  # heading turns part of the way toward the desired direction
+            with np.errstate(invalid="ignore"):
+                new_v = _unit((1 - a_s[:, None, None]) * vel_s + a_s[:, None, None] * new_v)
         moves = sees_dog | has_rep
         new_v = np.where(moves[..., None], new_v, vel_s)
-        new_pos_s = pos_s + np.where(moves[..., None], p.v_sheep * new_v, 0.0)
+        new_pos_s = pos_s + np.where(moves[..., None], c3["v_sheep"] * dt * new_v, 0.0)
 
         # ---- dog (reads sheep state at t-1) ----
+        if dog_path is not None:
+            new_pos_d = dog_path[..., t]
+            vel_d = (new_pos_d - pos_d) / dt
+            pos_s, vel_s, pos_d = new_pos_s, new_v, new_pos_d
+            P_s[..., t], V_s[..., t], P_d[..., t], V_d[..., t] = pos_s, vel_s, pos_d, vel_d
+            mode[:, t] = REPLAY
+            continue
+
         min_d = np.linalg.norm(pos_s - pos_d[:, None], axis=-1).min(-1)
-        slow = min_d <= p.r_rep
+        slow = min_d <= f["r_rep"]
         G = pos_s.mean(1)
         from_g = pos_s - G[:, None]
         spread = np.linalg.norm(from_g, axis=-1)
         far = spread.argmax(-1)
-        collect = ~slow & (spread.max(-1) >= p.l_sep)
+        collect = ~slow & (spread.max(-1) >= f["l_sep"])
         drive = ~slow & ~collect
 
         far_vec = from_g[np.arange(R), far]
         far_dist = spread[np.arange(R), far]
-        p_collect = G + (far_dist + p.l_collect)[:, None] * far_vec / far_dist[:, None]
+        p_collect = G + (far_dist + f["l_collect"])[:, None] * far_vec / far_dist[:, None]
         away_t = G - target
         g_norm = np.linalg.norm(away_t, axis=-1, keepdims=True)
-        p_drive = target + (g_norm + p.l_drive) * away_t / g_norm
+        p_drive = target + (g_norm + c2["l_drive"]) * away_t / g_norm
         aim = np.where(collect[:, None], p_collect, p_drive)
         th_d = 2 * np.pi * d["noise_d"]
-        dog_dir = _unit(_unit(aim - pos_d) + p.noise * np.stack([np.cos(th_d), np.sin(th_d)], -1))
+        dog_dir = _unit(_unit(aim - pos_d) + c2["noise_dog"] * np.stack([np.cos(th_d), np.sin(th_d)], -1))
+        if relax_d:
+            dog_dir = _unit((1 - a_d[:, None]) * vel_d + a_d[:, None] * dog_dir)
 
-        new_pos_d = np.where(slow[:, None], pos_d + p.dog_slow_step * vel_d, pos_d + p.v_dog * dog_dir)
+        new_pos_d = np.where(slow[:, None], pos_d + c2["dog_slow_step"] * dt * vel_d, pos_d + c2["v_dog"] * dt * dog_dir)
         vel_d = np.where(slow[:, None], vel_d, dog_dir)
 
         pos_s, vel_s, pos_d = new_pos_s, new_v, new_pos_d
