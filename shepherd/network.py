@@ -71,9 +71,11 @@ def front_back_position(pos, ux, uy, n_sheep):
     pos is (n, 2, T) aligned with ux/uy (n, T).
     """
     vg = np.stack([ux[:n_sheep].mean(0), uy[:n_sheep].mean(0)])
-    vg = vg / np.linalg.norm(vg, axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        vg = vg / np.linalg.norm(vg, axis=0)
     proj = (pos * vg[None]).sum(axis=1)  # (n, T): x_i . v_hat
-    dij = proj.mean(axis=1)[:, None] - proj.mean(axis=1)[None, :]
+    m = np.nanmean(proj, axis=1)  # time steps with no moving sheep have no flock direction
+    dij = m[:, None] - m[None, :]
     n = pos.shape[0]
     np.fill_diagonal(dij, np.nan)
     return np.nanmean(dij, axis=1)[:n]

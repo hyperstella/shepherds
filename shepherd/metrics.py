@@ -2,7 +2,8 @@
 
 Ports of the computations in figure_2ae.m, figure_2fj.m, figure_3.m,
 figure_4.m and model_results.m. All functions take MATLAB-layout arrays:
-positions/velocities (n_agents, 2, T) with sheep first, then the dog.
+positions/velocities (..., n_agents, 2, T) with sheep first, then the dog.
+Leading batch axes (e.g. simulation runs) are optional and carried through.
 """
 
 import numpy as np
@@ -28,27 +29,28 @@ def wrap(a):
 
 
 def speeds(vel):
-    return np.linalg.norm(vel, axis=1)  # (n, T)
+    return np.linalg.norm(vel, axis=-2)  # (..., n, T)
 
 
 def barycenter(pos, n_sheep):
-    return pos[:n_sheep].mean(axis=0)  # (2, T)
+    return pos[..., :n_sheep, :, :].mean(axis=-3)  # (..., 2, T)
 
 
 def cohesion(pos, n_sheep):
     """C(t): mean distance of sheep to the barycenter."""
     b = barycenter(pos, n_sheep)
-    return np.linalg.norm(pos[:n_sheep] - b, axis=1).mean(axis=0)
+    return np.linalg.norm(pos[..., :n_sheep, :, :] - b[..., None, :, :], axis=-2).mean(axis=-2)
 
 
 def polarization_from_phi(phi, n_sheep):
-    """P(t) from heading angles, as in figure_2fj.m."""
-    return np.hypot(np.cos(phi[:n_sheep]).mean(0), np.sin(phi[:n_sheep]).mean(0))
+    """P(t) from heading angles (..., n, T), as in figure_2fj.m."""
+    ph = phi[..., :n_sheep, :]
+    return np.hypot(np.cos(ph).mean(-2), np.sin(ph).mean(-2))
 
 
 def polarization_from_vel(vel, n_sheep):
     """P(t) from normalized velocities, as in model_results.m."""
-    return np.linalg.norm(_unit(vel[:n_sheep], axis=1).mean(0), axis=0)
+    return np.linalg.norm(_unit(vel[..., :n_sheep, :, :], axis=-2).mean(-3), axis=-2)
 
 
 def flock_frame(pos, vel, n_sheep):
@@ -56,15 +58,15 @@ def flock_frame(pos, vel, n_sheep):
 
     The flock velocity v_B = mean sheep velocity points along +y_bar, and
     x_bar > 0 is to the right of the direction of motion.
-    Returns two arrays of shape (n_agents, T).
+    Returns two arrays of shape (..., n_agents, T).
     """
     b = barycenter(pos, n_sheep)
-    vb = vel[:n_sheep].mean(axis=0)
-    ang = np.arctan2(vb[1], vb[0])
-    c, s = np.cos(ang), np.sin(ang)
-    rel = pos - b
-    along = c * rel[:, 0] + s * rel[:, 1]
-    left = -s * rel[:, 0] + c * rel[:, 1]
+    vb = vel[..., :n_sheep, :, :].mean(axis=-3)
+    ang = np.arctan2(vb[..., 1, :], vb[..., 0, :])
+    c, s = np.cos(ang)[..., None, :], np.sin(ang)[..., None, :]
+    rel = pos - b[..., None, :, :]
+    along = c * rel[..., 0, :] + s * rel[..., 1, :]
+    left = -s * rel[..., 0, :] + c * rel[..., 1, :]
     return -left, along
 
 
@@ -72,16 +74,16 @@ def frame_observables(pos, vel, n_sheep, dog=None):
     """Elongation E, dog lateral offset x_D, and dog-to-rear-sheep distance y_RD."""
     dog = n_sheep if dog is None else dog
     xb, yb = flock_frame(pos, vel, n_sheep)
-    xs, ys = xb[:n_sheep], yb[:n_sheep]
-    elong = (ys.max(0) - ys.min(0)) / (xs.max(0) - xs.min(0))
-    x_d = xb[dog]
-    y_rd = ys.min(0) - yb[dog]  # >0 when the dog is behind the rear sheep
+    xs, ys = xb[..., :n_sheep, :], yb[..., :n_sheep, :]
+    elong = (ys.max(-2) - ys.min(-2)) / (xs.max(-2) - xs.min(-2))
+    x_d = xb[..., dog, :]
+    y_rd = ys.min(-2) - yb[..., dog, :]  # >0 when the dog is behind the rear sheep
     return elong, x_d, y_rd
 
 
 def dog_barycenter_distance(pos, n_sheep, dog=None):
     dog = n_sheep if dog is None else dog
-    return np.linalg.norm(pos[dog] - barycenter(pos, n_sheep), axis=0)
+    return np.linalg.norm(pos[..., dog, :, :] - barycenter(pos, n_sheep), axis=-2)
 
 
 def viewing_angles(pos, vel, n_sheep, dog=None, dog_vel=None):
@@ -92,10 +94,11 @@ def viewing_angles(pos, vel, n_sheep, dog=None, dog_vel=None):
     phi_BD: heading difference phi_D - phi_B.
     """
     dog = n_sheep if dog is None else dog
-    b = barycenter(pos, n_sheep).T
-    vb = vel[:n_sheep].mean(axis=0).T
-    vd = (vel[dog] if dog_vel is None else dog_vel).T
-    r_bd = pos[dog].T - b
+    T_ = lambda a: np.swapaxes(a, -1, -2)  # (..., 2, T) -> (..., T, 2)
+    b = T_(barycenter(pos, n_sheep))
+    vb = T_(vel[..., :n_sheep, :, :].mean(axis=-3))
+    vd = T_(vel[..., dog, :, :] if dog_vel is None else dog_vel)
+    r_bd = T_(pos[..., dog, :, :]) - b
     return signed_angle(vb, r_bd), signed_angle(vd, -r_bd), signed_angle(vb, vd)
 
 
@@ -107,16 +110,16 @@ def turning_vs_viewing(pos, vel, n_sheep, lag, dog=None):
     Uses samples 1: onwards (sample 0 has no velocity), like the MATLAB code.
     """
     dog = n_sheep if dog is None else dog
-    pos, vel = pos[:, :, 1:], vel[:, :, 1:]
-    vb = vel[:n_sheep].mean(axis=0)
-    phi_b = np.arctan2(vb[1], vb[0])
-    phi_d = np.arctan2(vel[dog, 1], vel[dog, 0])
+    pos, vel = pos[..., 1:], vel[..., 1:]
+    vb = vel[..., :n_sheep, :, :].mean(axis=-3)
+    phi_b = np.arctan2(vb[..., 1, :], vb[..., 0, :])
+    phi_d = np.arctan2(vel[..., dog, 1, :], vel[..., dog, 0, :])
     psi_bd, psi_db, _ = viewing_angles(pos, vel, n_sheep, dog)
     return {
-        "dphi_B": wrap(phi_b[lag:] - phi_b[:-lag]),
-        "psi_BD": psi_bd[:-lag],
-        "dphi_D": wrap(phi_d[lag:] - phi_d[:-lag]),
-        "psi_DB": psi_db[:-lag],
+        "dphi_B": wrap(phi_b[..., lag:] - phi_b[..., :-lag]),
+        "psi_BD": psi_bd[..., :-lag],
+        "dphi_D": wrap(phi_d[..., lag:] - phi_d[..., :-lag]),
+        "psi_DB": psi_db[..., :-lag],
     }
 
 

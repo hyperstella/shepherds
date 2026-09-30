@@ -148,3 +148,28 @@ The model **does not match quantitatively**:
   "stress" proxy (sheep speed, closeness to the dog).
 - Multiple dogs, obstacles and terrain, plus a browser-based viewer (Canvas or WebGL) with
   parameter sliders and real drives replayed on top.
+
+---
+
+## Phase 1: a fair protocol, and three findings confirmed
+
+`shepherd/protocol.py` analyses real and simulated drives the same way:
+- positions sampled every dt;
+- headings from displacement, with samples slower than 0.1 m/s excluded;
+- signed cross-correlation, with the lag window given in seconds;
+- statistics at the level of individual sheep, with session-level bootstrap intervals and
+  time-shift surrogates.
+
+Run `experiments/protocol_check.py` to reproduce this section; it writes
+`results/protocol_check.json` and `results/figures/protocol_check.png`.
+
+| Finding | Result |
+|---|---|
+| **F2: the paper's r = 0.87 comes from bin means** | The legacy pipeline reproduces the bin-mean r of 0.874 exactly. Per sheep, the same data give Spearman ρ = 0.36. Under the fair protocol ρ = **0.40 (95% CI 0.30–0.48, session bootstrap)**. All 500 time-shift surrogates fall below it (p ≈ 0.002; null mean ρ ≈ −0.04). **The front-to-back hierarchy in the real flock is real, but moderate.** |
+| **F3: follow delays are sub-second** | Median leader→follower lag is **0.5 s** (IQR 0.2–0.8 s). ρ stays at 0.36–0.42 for maximum lags from 1 to 4 s, and for sampling steps from 0.1 to 0.5 s. At a 1 s step it falls to **0.25**, so a model that steps once per second cannot show the effect at its natural time scale. |
+| **F1: the published model's hierarchy is a start-up transient** | These results are from 300 runs of M0. With the authors' own model analysis (\|CCF\|, 20 s lag window), per-sheep ρ is 0.34 in steps 1–100 but only **0.10 in steady driving** (steps 100–370). Its bin-mean r stays at 0.81–0.94, which is why the paper's Fig 5e looked like a match. **Under the fair protocol the published model shows no hierarchy during steady driving: ρ = 0.00 (95% CI −0.03 to 0.03).** |
+
+**Consequence for the paper.** The real flock has a statistically robust front-to-back hierarchy
+at sub-second lags, and the published model does not reproduce it once it is analysed like the
+data. That makes the question of whether a *learned* interaction model can reproduce it (Q3) a
+sharp test.
