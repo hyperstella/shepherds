@@ -31,7 +31,7 @@ from shepherd import abc as ABC, data, kernels as K, protocol as PR, scenario as
 from shepherd.model import Params  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "experiments"))
-from build_table import FIT_STATS, HYBRID_PRIORS, MODELS, V_SHEEP  # noqa: E402
+from build_table import FIT_STATS, HYBRID_PRIORS, MODELS, V_SHEEP, WEIGHTS  # noqa: E402
 
 TABLES, OUT = ROOT / "results" / "tables", ROOT / "results"
 COLS = [PR.SUMMARY_KEYS.index(k) for k in FIT_STATS]
@@ -127,6 +127,7 @@ def main():
 
     # ---- Q2: held-out sessions ----
     m1, m1t, hyb = load("M1"), load("M1tau"), load("hybrid")
+    m2, m2t = load("M2"), load("M2tau")
     meta1 = {k[5:]: v for k, v in m1.items() if k.startswith("meta_")}
     meta02 = {k[5:]: v for k, v in m1t.items() if k.startswith("meta_")}
     preds = {
@@ -135,9 +136,11 @@ def main():
         ("dt=1 s", "M0s published + flock speed"): (heldout_fixed(load("M0s")), meta1),
         ("dt=1 s", "M0b + body-length spacing"): (heldout_fixed(load("M0b")), meta1),
         ("dt=1 s", "M1 calibrated"): (heldout_param(m1, "M1"), meta1),
+        ("dt=1 s", "M2 calibrated, weight shares"): (heldout_param(m2, "M2"), meta1),
         ("dt=0.2 s", "training-data average"): (heldout_train_mean(meta02), meta02),
         ("dt=0.2 s", "M0s published + flock speed"): (heldout_fixed(load("M0s_dt02")), meta02),
         ("dt=0.2 s", "M1tau calibrated"): (heldout_param(m1t, "M1tau"), meta02),
+        ("dt=0.2 s", "M2tau calibrated, weight shares"): (heldout_param(m2t, "M2tau"), meta02),
         ("dt=0.2 s", "Learned kernels + gains"): (heldout_hybrid(hyb), meta02),
     }
     for (dt, name), (pred, meta) in preds.items():
@@ -149,6 +152,14 @@ def main():
     post1t, draws1t = posterior_all(m1t, "M1tau")
     res["posteriors"]["M1"] = post1.summary(MODELS["M1"]["priors"])
     res["posteriors"]["M1tau"] = post1t.summary(MODELS["M1tau"]["priors"])
+    post2, draws2 = posterior_all(m2, "M2")
+    post2t, draws2t = posterior_all(m2t, "M2tau")
+    for name, post in (("M2", post2), ("M2tau", post2t)):
+        res["posteriors"][name] = {k: v for k, v in post.summary(MODELS[name]["priors"]).items() if k not in WEIGHTS}
+        res["posteriors"][name]["weight_shares"] = ABC.shares(post.samples, list(WEIGHTS))
+        print(name, {k: (round(v["median"], 2), [round(x, 2) for x in v["ci90"]])
+                     for k, v in res["posteriors"][name].items() if k != "weight_shares"},
+              "shares:", {k: round(v["median"], 3) for k, v in res["posteriors"][name]["weight_shares"].items()})
     thh = {k: hyb[f"th_all_{k}"] for k in HYBRID_PRIORS}
     simsh = ABC.aggregate(hyb["tab_all"][..., COLS], meta02["durations"])
     obsh = ABC.aggregate(meta02["obs"][None, :, COLS], meta02["durations"])[0]
@@ -172,6 +183,9 @@ def main():
                                                                                    speed_replay=True)))
     res["hierarchy"]["M1tau posterior"] = hierarchy_of(SC.unbatch(SC.replay_windows(drives, base02, n_draw, 7, 0.2,
                                                                                     per_run=per, speed_replay=True)))
+    per2 = {k: v[:n_draw] for k, v in draws2t.items()}
+    res["hierarchy"]["M2tau posterior"] = hierarchy_of(SC.unbatch(SC.replay_windows(drives, base02, n_draw, 7, 0.2,
+                                                                                    per_run=per2, speed_replay=True)))
     fit = np.load(TABLES / "kernel_fit.npz")
     km = K.KernelModel(terms=tuple(str(t) for t in fit["terms"]))
     c_all = hyb["coef_all"]
@@ -217,10 +231,12 @@ def plot(res):
     vals = [h[k]["spearman"] for k in labels]
     ci = np.array([h[k]["spearman_ci95"] for k in labels])
     x = np.arange(len(labels))
-    axs[1].bar(x, vals, color=["#52514e", "#eb6834", "#2a78d6", "#1baf7a", "#b8b7b1", "#1baf7a", "#b8b7b1"][: len(labels)])
+    colour = {"data": "#52514e", "M0s published": "#eb6834", "M1tau posterior": "#2a78d6", "M2tau posterior": "#2a78d6"}
+    axs[1].bar(x, vals, color=[colour.get(l, "#1baf7a" if "dog removed" not in l else "#b8b7b1") for l in labels])
     axs[1].errorbar(x, vals, yerr=np.abs(ci.T - vals), fmt="none", ecolor="#17201a", capsize=3)
     axs[1].axhline(0, color="#52514e", lw=0.8)
     short = {"data": "Real\nflock", "M0s published": "Published\nmodel", "M1tau posterior": "Calibrated\nM1τ",
+             "M2tau posterior": "Calibrated\nM2τ\n(shares)",
              "learned posterior": "Learned", "learned, dog removed (polarized null)": "Learned,\nno dog",
              "learned, flock velocity replayed": "Learned,\nflock vel.\nreplayed",
              "learned, flock velocity replayed, dog removed": "Learned,\nflock vel.\nreplayed,\nno dog"}

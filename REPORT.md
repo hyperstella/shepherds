@@ -350,3 +350,103 @@ position; the CIs come from a session bootstrap.
     overshoot ρ.
   - Each window starts from the real configuration, so front/back positions are partly inherited.
   - One flock and one dog.
+
+### Robustness of the leadership result (`experiments/hierarchy_robustness.py`)
+
+All rows use the learned-kernel model with posterior gains and the same fair protocol. The real
+flock's ρ is 0.30 in 15 s windows and 0.40 in 30 s windows.
+
+| Check | ρ (95% CI) | Polarization P |
+|---|---|---|
+| Learned model, as in Phase 5 | 0.27 (0.23–0.33) | 0.61 |
+| **Front/back mirrored at the start of each window** | **0.27** (0.23–0.33) | 0.61 |
+| **All sheep start with the flock's mean heading** | **0.27** (0.23–0.31) | 0.66 |
+| 30 s windows | 0.24 (0.18–0.27) | 0.52 |
+| Flock velocity replayed, noise 0.03 → 0.2: dog vs no dog | 0.49 / 0.50 → 0.46 / 0.47 | 0.79 → 0.66 |
+| **+ weak uniform alignment 0.005/s: dog vs no dog** | **0.39 / 0.42** | **0.90 / 0.88** (real flock 0.89) |
+| + alignment 0.01/s: dog vs no dog | 0.28 / 0.32 | 0.93 / 0.92 |
+| + alignment 0.02 / 0.05 / 0.10 per s | 0.15 → 0.04 → 0.00 | 0.97 → 1.00 |
+
+1. **The hierarchy is produced by the dynamics, not inherited.** Mirroring the starting layout
+   front-to-back, or erasing individual starting headings, leaves ρ unchanged.
+2. **The dog does not create it.** With the flock's collective motion held fixed, removing the dog
+   leaves ρ the same, or slightly higher, at every noise level. This includes the alignment strength
+   at which polarization matches the real flock (0.89).
+3. **Strong alignment destroys front-to-back leadership.** As alignment grows, polarization goes to
+   1 and ρ to 0: when every sheep copies every other, heading information no longer flows from
+   front to back. Weak alignment (about 0.005–0.01 per neighbour per second) reproduces both the
+   real flock's polarization and its hierarchy. This is also why the alignment-dominated calibrated
+   parametric model shows no hierarchy.
+
+## Phase 7 (feasibility): a second dataset
+
+A desk check of public sources; nothing was downloaded.
+
+| Source | Contents | Dog? | Licence or terms | Verdict |
+|---|---|---|---|---|
+| **King et al. 2012 / Strömbom et al. 2014 GPS data** ([shoalgroup.org/data](https://www.shoalgroup.org/data)) | 46 merino sheep and 1 kelpie, 3 herding events, 1 Hz GPS, 10–20 cm accuracy, already tracked | Yes | "Cite our papers, email us"; no formal licence | **Best candidate**: a different flock, dog breed and country. Needs permission to publish derived trajectories. |
+| Gómez-Nava et al. 2022 ([Zenodo 6905807](https://zenodo.org/records/6905807)) | Videos of 2–4 sheep from a tower, 2.1 GB, no tracks | No | CC-BY 4.0 | Not a herding dataset |
+| AUTH-Sheep / ICAERUS drone sets (Zenodo) | Drone video, some boxes and tracks | No | CC-BY 4.0 | No dog |
+| de Marcken & Sarfati 2020 (YouTube drone clip) | About 1 min of a dense flock and 1 dog | Yes | Standard YouTube licence (assume no redistribution) | Qualitative check only |
+| Pexels aerial herding clip | 32 s, 4K, 2 dogs | Yes | Pexels licence (free use) | Too short; sanity check only |
+
+**Recommendation:** go, conditionally. Ask the King lab for terms and metadata first; a draft
+request is in `docs/data_request_king_lab.md`. If they agree, extract the driving phases (dog
+behind the flock) so they match how the Jadhav data defines a drive, resample to their 1 Hz, and
+use them as an out-of-distribution test of the learned kernels and the calibrated model.
+
+## Phase 3b: recalibration with weight-share priors (M2, M2τ)
+
+The heading rule depends only on the *ratios* of its six weights. M2 and M2τ therefore give each
+weight an independent Exponential(1) prior, which is a uniform prior on their shares, and report
+shares instead of fixing w_rep.
+
+| | M2 (dt = 1 s) | M2τ (dt = 0.2 s) |
+|---|---|---|
+| Personal space r_rep | 0.46 m (0.14–0.86) | 0.11 m (at the prior floor) |
+| Notice radius for the dog r_dog | 5.8 m (5.4–6.2) | 7.0 m (6.6–7.4) |
+| Heading relaxation τ_s | — | 2.0 s (0.3–2.6) |
+| **Alignment share** | **0.81** | **0.99** |
+| Repulsion share | 0.17 | < 0.01 |
+| Attraction, dog, inertia and noise shares | < 0.01 each | < 0.01 each |
+| Held-out error (Q2) | **0.86** (best at dt = 1 s; M1: 1.33) | 1.15 (M1τ: 1.03) |
+| Hierarchy ρ / dog's rank | — | 0.23 (0.15–0.32) / **1 of 15** |
+
+**Short windows choose an alignment-only model.** Each 12 s window starts from a real, already
+cohesive flock, and copying a random neighbour's heading preserves that formation well enough to
+match the summaries. Attraction is therefore not constrained. M2τ even comes close to the data's ρ,
+but for the wrong reason: it makes **the dog the most-followed animal** (rank 1, against rank 15 in
+the real flock), because the sheep simply lag the replayed dog's turns. Matching summary statistics
+does not guarantee the right causal structure, and the hierarchy test catches that.
+
+## Phase 6 (Q4): closed-loop herding
+
+`experiments/dog_control.py`. The task is to drive the flock 60 m to a target within 300 s, at
+N = 14, 50 and 100, with 64 runs per condition. The tuned heuristic is chosen on separate runs.
+
+**The dogs:**
+- **Published:** the Strömbom heuristic (drive point 2√N m behind the flock, 1.5 m/s, instant
+  turning).
+- **Data-derived** (`shepherd/dog_policy.py`): every quantity measured from the real collie. It
+  works 4.2 m behind the flock centre, flanks sideways as an Ornstein–Uhlenbeck process (SD 2.5 m,
+  correlation time 2.7 s), turns toward its aim with a 2.2 s time constant, and has speed
+  0.39 m/s per metre of distance to its aim, capped at 3.0 m/s.
+- **Tuned heuristic:** the best of a small grid over drive distance, speed and flanking.
+
+| Flock model | N | Published dog | Data-derived dog | Tuned heuristic |
+|---|---|---|---|---|
+| **Published sheep (M0)** | 14 | 100% success, 68 s | 100%, 76.5 s, dog < 3 m from a sheep 25% of the time | 100%, 69 s |
+| Published sheep (M0) | 50, 100 | 0% (flock larger than the 12 m notice radius) | 0% | 0% |
+| Calibrated M2τ, grazing | 14–100 | 0% | 0–3% | 0% |
+| Calibrated M2τ, social always on | 14–100 | 0–2% | 2–9% | 2–3% |
+
+- **The calibrated flocks fall apart in closed loop:** cohesion 13–180 m. They were fitted only on
+  12 s windows that start from real flocks, and they carry almost no attraction. So **calibrating
+  on short horizons does not give a stable closed-loop flock simulator.** The fix is to calibrate on
+  several horizons, adding long windows or a closed-loop cohesion statistic; that is the next
+  modelling step.
+- **On the published flock** at N = 14, all three dogs succeed. The collie-style dog is about 10%
+  slower and works much closer to the sheep. With fixed sheep perception, no single dog can drive
+  50 or 100 sheep.
+- **This answers Q4 only partly.** A data-derived dog shows no performance advantage here, and a
+  real test needs a flock model that is cohesive over long horizons.

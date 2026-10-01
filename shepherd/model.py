@@ -22,6 +22,7 @@ INIT, DRIVE, COLLECT, SLOW, REPLAY = 0, 1, 2, 3, 4
 PER_RUN_FIELDS = (
     "r_rep", "r_dog", "v_sheep", "v_dog", "w_inertia", "w_rep", "w_dog", "noise", "w_att", "w_ali",
     "dog_slow_step", "l_sep", "l_drive", "l_collect", "tau_s", "tau_d", "noise_dog",
+    "flank_sigma", "flank_tau", "dog_speed_gain",
 )
 
 
@@ -57,6 +58,12 @@ class Params:
     tau_s: float | None = None  # sheep heading relaxation time (None = dt: jump to the desired heading)
     tau_d: float | None = None  # same for the dog
     noise_dog: float | None = None  # dog heading noise (None = noise)
+    flank_sigma: float = 0.0  # SD (m) of a random sideways offset of the drive point (OU process)
+    flank_tau: float = 2.0  # correlation time (s) of that offset
+    dog_speed_gain: float | None = None  # if set, dog speed = min(v_dog, gain * distance to its aim)
+    # Paper's modified model (Supp. Sec. 3): social interactions are always on and
+    # sheep keep moving; the dog term applies only within r_dog.
+    social_always: bool = False
 
     def resolved(self):
         n = self.n_sheep
@@ -205,9 +212,14 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
 
     P_s, V_s, P_d, V_d, mode = _allocate(R, p)
     P_s[..., 0], V_s[..., 0], P_d[..., 0], V_d[..., 0] = pos_s, vel_s, pos_d, vel_d
+    flanking = bool(np.any(f["flank_sigma"] > 0))
+    flank = np.zeros(R)
 
     for t in range(1, p.n_steps):
         d = _draw_step(rng, R, p)
+        if flanking:  # extra draws only when flanking is on, so default runs are unchanged
+            a_f = dt / f["flank_tau"]
+            flank = flank * (1 - a_f) + f["flank_sigma"] * np.sqrt(2 * a_f) * rng.standard_normal(R)
 
         # ---- sheep (all read state at t-1) ----
         r_ij = pos_s[:, None, :, :] - pos_s[:, :, None, :]  # [r, i, j] = x_j - x_i
@@ -228,6 +240,9 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
         if not p.dog_present:
             sees_dog = np.ones_like(sees_dog)
             away = np.zeros_like(away)
+        elif p.social_always:
+            away = np.where(sees_dog[..., None], away, 0.0)
+            sees_dog = np.ones_like(sees_dog)
 
         knn = np.argsort(dist, axis=-1, kind="stable")[..., 1 : p.k_perceive + 1]
         att = np.take_along_axis(knn, np.argsort(d["att_keys"], -1)[..., : p.n_att], -1)
@@ -277,13 +292,19 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
         away_t = G - target
         g_norm = np.linalg.norm(away_t, axis=-1, keepdims=True)
         p_drive = target + (g_norm + c2["l_drive"]) * away_t / g_norm
+        if flanking:
+            side = np.stack([-away_t[:, 1], away_t[:, 0]], -1) / g_norm
+            p_drive = p_drive + flank[:, None] * side
         aim = np.where(collect[:, None], p_collect, p_drive)
         th_d = 2 * np.pi * d["noise_d"]
         dog_dir = _unit(_unit(aim - pos_d) + c2["noise_dog"] * np.stack([np.cos(th_d), np.sin(th_d)], -1))
         if relax_d:
             dog_dir = _unit((1 - a_d[:, None]) * vel_d + a_d[:, None] * dog_dir)
 
-        new_pos_d = np.where(slow[:, None], pos_d + c2["dog_slow_step"] * dt * vel_d, pos_d + c2["v_dog"] * dt * dog_dir)
+        v_dog = c2["v_dog"]
+        if p.dog_speed_gain is not None or "dog_speed_gain" in (per_run or {}):
+            v_dog = np.minimum(v_dog, c2["dog_speed_gain"] * np.linalg.norm(aim - pos_d, axis=-1, keepdims=True))
+        new_pos_d = np.where(slow[:, None], pos_d + c2["dog_slow_step"] * dt * vel_d, pos_d + v_dog * dt * dog_dir)
         vel_d = np.where(slow[:, None], vel_d, dog_dir)
 
         pos_s, vel_s, pos_d = new_pos_s, new_v, new_pos_d

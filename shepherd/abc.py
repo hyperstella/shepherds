@@ -26,21 +26,35 @@ from .model import Params
 
 @dataclass(frozen=True)
 class Prior:
-    lo: float
-    hi: float
+    """Uniform on [lo, hi] (log scale if `log`), or Exponential(1) if `exp`.
+
+    Independent Exponential(1) weights give a uniform (Dirichlet(1, ..., 1))
+    prior on their shares w_k / sum(w), the natural prior for weights that
+    only matter through their ratios.
+    """
+
+    lo: float = 0.0
+    hi: float = 1.0
     log: bool = True
+    exp: bool = False
 
     def to_z(self, x):
-        """Map to an unbounded space (logit of the scaled position)."""
+        """Map to an unbounded space (logit of the scaled position, or log for exp)."""
+        if self.exp:
+            return np.log(np.maximum(x, 1e-300))
         u = (np.log(x) - np.log(self.lo)) / (np.log(self.hi) - np.log(self.lo)) if self.log else (x - self.lo) / (self.hi - self.lo)
         u = np.clip(u, 1e-6, 1 - 1e-6)
         return np.log(u / (1 - u))
 
     def from_z(self, z):
+        if self.exp:
+            return np.exp(z)
         u = 1 / (1 + np.exp(-z))
         return np.exp(np.log(self.lo) + u * (np.log(self.hi) - np.log(self.lo))) if self.log else self.lo + u * (self.hi - self.lo)
 
     def from_unit(self, u):
+        if self.exp:
+            return -np.log1p(-np.clip(u, 0, 1 - 1e-12))
         return np.exp(np.log(self.lo) + u * (np.log(self.hi) - np.log(self.lo))) if self.log else self.lo + u * (self.hi - self.lo)
 
 
@@ -51,7 +65,7 @@ def sobol_prior(priors, n, seed=0, box=None):
     out = {}
     for j, k in enumerate(names):
         pr = priors[k]
-        if box is not None:
+        if box is not None and box.get(k) is not None:
             lo, hi = box[k]
             pr = Prior(lo, hi, pr.log)
         out[k] = pr.from_unit(u[:, j])
@@ -236,11 +250,23 @@ def coverage(theta, sims, priors, n_test=50, accept=0.01, level=0.9, seed=0):
     return {k: v / n_test for k, v in hits.items()}
 
 
+def shares(samples, names):
+    """Posterior of each weight's share w_k / sum(w) (scale-free)."""
+    W = np.stack([samples[k] for k in names], 1)
+    S = W / W.sum(1, keepdims=True)
+    return {k: {"median": float(np.median(S[:, j])), "ci90": [float(v) for v in np.percentile(S[:, j], [5, 95])]}
+            for j, k in enumerate(names)}
+
+
 def truncated_box(post, priors, margin=0.1):
-    """Bounding box of accepted draws, widened by `margin` (in the prior's scale)."""
+    """Bounding box of accepted draws, widened by `margin` (in the prior's scale).
+    Exponential priors are left untruncated (only their ratios are identified)."""
     box = {}
     for k in post.names:
         pr, s = priors[k], post.raw[k]
+        if pr.exp:
+            box[k] = None
+            continue
         if pr.log:
             lo, hi = np.log(s.min()), np.log(s.max())
             w = hi - lo

@@ -136,12 +136,14 @@ def unbatch(segs):
 
 def replay_windows_kernel(drives, model, coef, sigma, n_runs=1, seed=0, dt=1.0, horizon=15.0, burn=3.0,
                           min_len_s=6.0, window_s=2.1, min_speed=PR.MIN_SPEED, speed_replay=True,
-                          velocity_replay=False):
+                          velocity_replay=False, init_fn=None):
     """Same windows as `replay_windows`, for a learned second-order kernel model.
 
     The model is integrated at the 0.1 s tracking step from the smoothed real
     sheep positions and velocities at each window start, with the smoothed
-    real dog path replayed, then sampled every dt.
+    real dog path replayed, then sampled every dt. init_fn(pos, vel) -> (pos, vel)
+    may alter the starting state ((N, 2) arrays), e.g. to test what is inherited
+    from the real configuration.
     """
     from . import kernels as KN
 
@@ -155,8 +157,11 @@ def replay_windows_kernel(drives, model, coef, sigma, n_runs=1, seed=0, dt=1.0, 
             s10, e10 = s * k, (e - 1) * k + 1
             speed = np.linalg.norm(vel[:N, :, s10:e10], axis=1).mean(0) if speed_replay and not velocity_replay else None
             mean_vel = vel[:N, :, s10:e10].mean(0) if velocity_replay else None
-            P, _ = KN.simulate(model, coef, sigma, np.repeat(pos[None, :N, :, s10], n_runs, 0),
-                               np.repeat(vel[None, :N, :, s10], n_runs, 0), pos[N, :, s10:e10],
+            p0, v0 = pos[:N, :, s10], vel[:N, :, s10]
+            if init_fn is not None:
+                p0, v0 = init_fn(p0, v0)
+            P, _ = KN.simulate(model, coef, sigma, np.repeat(p0[None], n_runs, 0),
+                               np.repeat(v0[None], n_runs, 0), pos[N, :, s10:e10],
                                seed=None if seed is None else seed + i, speed_path=speed, mean_vel_path=mean_vel)
             i += 1
             seg = PR.from_positions(P[..., ::k], dt, N, min_speed, d.session, f"s{d.session}d{d.index + 1}w{w}")

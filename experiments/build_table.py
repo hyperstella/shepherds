@@ -55,10 +55,21 @@ SHEEP_PRIORS = {
 # model identifies how the flock's overall speed is regulated.
 REPLAY = {"speed_replay": True}
 
+# The six terms of the sheep's heading rule only matter through their ratios.
+WEIGHTS = ("w_inertia", "w_rep", "w_dog", "w_att", "w_ali", "noise")
+SHARE_PRIORS = {
+    "r_rep": ABC.Prior(0.1, 3.0),
+    "r_dog": ABC.Prior(3.0, 25.0, log=False),
+    **{k: ABC.Prior(exp=True) for k in WEIGHTS},  # uniform prior on the weight shares
+}
+
 MODELS = {
-    # w_rep = 2 is fixed as the scale reference: sheep weights only matter up to a common factor.
+    # First calibration: w_rep = 2 fixed as the scale reference (alignment ran to the prior edge).
     "M1": {"dt": 1.0, "priors": SHEEP_PRIORS},
     "M1tau": {"dt": 0.2, "priors": {**SHEEP_PRIORS, "tau_s": ABC.Prior(0.2, 3.0)}},
+    # Reparametrized: all six weights free with a uniform prior on their shares.
+    "M2": {"dt": 1.0, "priors": SHARE_PRIORS},
+    "M2tau": {"dt": 0.2, "priors": {**SHARE_PRIORS, "tau_s": ABC.Prior(0.05, 3.0)}},
 }
 
 BASELINES = {
@@ -98,7 +109,8 @@ def build_model(name, n1, n2, seed, workers):
         dt=dt, v_sheep=base.v_sheep, stats=np.array(PR.SUMMARY_KEYS), fit_stats=np.array(FIT_STATS),
         names=np.array(list(priors)), **{f"th1_{k}": v for k, v in th1.items()}, tab1=tab1,
         **{f"th2_{k}": v for k, v in th2.items()}, tab2=tab2,
-        box=np.array([box[k] for k in priors]), **{f"meta_{k}": v for k, v in meta.items()},
+        box=np.array([box[k] if box[k] is not None else (np.nan, np.nan) for k in priors]),
+        **{f"meta_{k}": v for k, v in meta.items()},
     )
 
 
