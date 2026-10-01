@@ -167,3 +167,54 @@ def replay_windows_kernel(drives, model, coef, sigma, n_runs=1, seed=0, dt=1.0, 
             seg = PR.from_positions(P[..., ::k], dt, N, min_speed, d.session, f"s{d.session}d{d.index + 1}w{w}")
             out.append(_trim(seg, b))
     return out
+
+
+
+def closed_loop_drives(drives, params=Params(), n_runs=1, seed=0, dt=1.0, per_run=None, dog=None,
+                       min_len_s=20.0, burn=3.0, push_m=20.0, min_speed=PR.MIN_SPEED):
+    """Long horizon, closed loop: each real drive of at least `min_len_s` is
+    re-run from its first frame for its full length, with the model dog
+    (e.g. the measured collie policy) instead of the recorded one. The target
+    is the drive's final flock centre pushed `push_m` further along the net
+    displacement, so the dog keeps driving in the real direction.
+    Returns one batched Segment per drive (burn-in dropped).
+    """
+    k = int(round(dt / data.DT))
+    b = int(round(burn / dt))
+    dog = dict(dog or {})
+    flags = {"flank_sigma": 1e-9 if dog.get("flank_sigma", 0) > 0 else 0.0,
+             "dog_speed_gain": dog.get("dog_speed_gain")}
+    out = []
+    for i, d in enumerate(drives):
+        frames = d.pos[: N + 1, :, ::k]
+        T = frames.shape[-1]
+        if T * dt < min_len_s:
+            continue
+        g0, g1 = frames[:N, :, 0].mean(0), frames[:N, :, -1].mean(0)
+        u = (g1 - g0) / (np.linalg.norm(g1 - g0) + 1e-9)
+        target = tuple(g1 + push_m * u)
+        init, _ = drive_start(d, dt)
+        init["pos_d"] = frames[N, :, 0][None]
+        dv = frames[N, :, 1] - frames[N, :, 0]
+        init["vel_d"] = (dv / (np.linalg.norm(dv) + 1e-9))[None]
+        p = replace(params, n_sheep=N, dt=dt, n_steps=T, target=target, **flags)
+        pr = {**(per_run or {}), **{kk: np.broadcast_to(np.asarray(v, float), (n_runs,)).copy()
+                                     for kk, v in dog.items() if v is not None}}
+        res = simulate(p, n_runs, None if seed is None else seed + i, per_run=pr, init=init)
+        pos = np.concatenate([res.pos_s, res.pos_d[:, None]], axis=1)
+        seg = PR.from_positions(pos, dt, N, min_speed, d.session, f"s{d.session}d{d.index + 1}")
+        out.append(_trim(seg, b))
+    return out
+
+
+def real_long_segments(drives, dt=1.0, min_len_s=20.0, burn=3.0, min_speed=PR.MIN_SPEED):
+    """The real drives used by `closed_loop_drives`, sampled and trimmed the same way."""
+    k = int(round(dt / data.DT))
+    b = int(round(burn / dt))
+    out = []
+    for d in drives:
+        frames = d.pos[: N + 1, :, ::k]
+        if frames.shape[-1] * dt < min_len_s:
+            continue
+        out.append(_trim(PR.from_positions(frames, dt, N, min_speed, d.session, f"s{d.session}d{d.index + 1}"), b))
+    return out

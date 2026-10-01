@@ -70,7 +70,20 @@ MODELS = {
     # Reparametrized: all six weights free with a uniform prior on their shares.
     "M2": {"dt": 1.0, "priors": SHARE_PRIORS},
     "M2tau": {"dt": 0.2, "priors": {**SHARE_PRIORS, "tau_s": ABC.Prior(0.05, 3.0)}},
+    # Multi-horizon: M2 plus long closed-loop drives with the measured collie policy.
+    "M3": {"dt": 1.0, "priors": SHARE_PRIORS, "multi": True},
+    "M3tau": {"dt": 0.2, "priors": {**SHARE_PRIORS, "tau_s": ABC.Prior(0.05, 3.0)}, "multi": True},
 }
+
+
+def measured_dog():
+    """The real collie's policy parameters (shepherd/dog_policy.py), as per-run model fields."""
+    from shepherd import data, dog_policy as DP
+
+    m = DP.estimate(data.load_drives(data.load_sessions()))
+    return {"l_drive": m["l_drive"], "v_dog": m["v_dog"], "tau_d": m["tau_d"], "flank_sigma": m["flank_sigma"],
+            "flank_tau": m["flank_tau"], "dog_speed_gain": m["dog_speed_gain"], "noise_dog": 0.3,
+            "l_sep": 11.6, "l_collect": 2.0}
 
 BASELINES = {
     "M0": (1.0, Params(), {}),  # exactly as published (constant 1 m/s)
@@ -88,11 +101,28 @@ def build_model(name, n1, n2, seed, workers):
     cols = [PR.SUMMARY_KEYS.index(k) for k in FIT_STATS]
     obs = ABC.aggregate(meta["obs"][:, cols], meta["durations"])
 
+    multi = spec.get("multi", False)
+    dog = measured_dog() if multi else None
+    extra = {}
+    if multi:
+        lmeta = ABC.long_meta(dt)
+        obs = np.concatenate([obs, ABC.aggregate(lmeta["obs"][None], lmeta["durations"])[0]])
+        extra.update({f"lmeta_{k}": v for k, v in lmeta.items()})
+
+    def table(theta, s):
+        if not multi:
+            return ABC.simulate_table(theta, base, dt, seed=s, workers=workers, window_kw=REPLAY), None
+        return ABC.simulate_table_multi(theta, base, dt, seed=s, workers=workers, window_kw=REPLAY, dog=dog)
+
+    def combined(tab, ltab):
+        S = ABC.aggregate(ABC.sanitize(tab)[..., cols], meta["durations"])
+        return S if ltab is None else np.concatenate([S, ABC.aggregate(ltab, lmeta["durations"])], axis=1)
+
     t = time.time()
     th1 = ABC.sobol_prior(priors, n1, seed)
-    tab1 = ABC.simulate_table(th1, base, dt, seed=seed * 1_000_000, workers=workers, window_kw=REPLAY)
+    tab1, ltab1 = table(th1, seed * 1_000_000)
     print(f"{name}: round 1, {n1} sets x {tab1.shape[1]} windows in {time.time() - t:.0f}s")
-    sims1 = ABC.aggregate(tab1[..., cols], meta["durations"])
+    sims1 = combined(tab1, ltab1)
     post1 = ABC.fit(th1, sims1, obs, ABC.mad_scale(sims1), priors, accept=0.02)
     box = ABC.truncated_box(post1, priors)
     print("  round-1 posterior:", {k: [round(v["median"], 3), [round(c, 3) for c in v["ci90"]]]
@@ -100,7 +130,12 @@ def build_model(name, n1, n2, seed, workers):
 
     t = time.time()
     th2 = ABC.sobol_prior(priors, n2, seed + 1, box=box)
-    tab2 = ABC.simulate_table(th2, base, dt, seed=(seed + 1) * 1_000_000, workers=workers, window_kw=REPLAY)
+    tab2, ltab2 = table(th2, (seed + 1) * 1_000_000)
+    if multi:
+        extra.update({"ltab1": ltab1, "ltab2": ltab2, "long_stats": np.array(PR.LONG_KEYS)})
+        post2 = ABC.fit(th2, combined(tab2, ltab2), obs, ABC.mad_scale(combined(tab2, ltab2)), priors, accept=0.01)
+        print("  round-2 posterior:", {k: [round(v["median"], 3), [round(c, 3) for c in v["ci90"]]]
+                                       for k, v in post2.summary(priors).items()})
     print(f"{name}: round 2, {n2} sets in {time.time() - t:.0f}s; box {box}")
 
     TABLES.mkdir(parents=True, exist_ok=True)
@@ -110,7 +145,7 @@ def build_model(name, n1, n2, seed, workers):
         names=np.array(list(priors)), **{f"th1_{k}": v for k, v in th1.items()}, tab1=tab1,
         **{f"th2_{k}": v for k, v in th2.items()}, tab2=tab2,
         box=np.array([box[k] if box[k] is not None else (np.nan, np.nan) for k in priors]),
-        **{f"meta_{k}": v for k, v in meta.items()},
+        **{f"meta_{k}": v for k, v in meta.items()}, **extra,
     )
 
 

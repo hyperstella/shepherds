@@ -72,3 +72,31 @@ def test_replay_windows_align_with_data_windows(drives):
     for r, s in zip(real, sim):
         assert s.pos.shape == (2, *r.pos.shape)
         np.testing.assert_allclose(s.pos[:, -1], np.broadcast_to(r.pos[-1], s.pos[:, -1].shape))  # dog replayed
+
+
+def test_long_summaries_detect_a_dispersing_flock():
+    T, N = 30, 14
+    rng = np.random.default_rng(0)
+    base = rng.normal(0, 1, (N, 2))
+    pos = np.zeros((N + 1, 2, T))
+    for t in range(T):
+        grow = 1 + 0.2 * t  # flock spreads out over time
+        pos[:N, :, t] = base * grow + np.array([t * 1.0, 0])
+    pos[N, :, :] = pos[:N].mean(0) - np.array([[5.0], [0.0]])
+    seg = PR.from_positions(pos, 1.0, N)
+    out = PR.long_summaries(seg)
+    assert out["C_drift"] > 3 and out["frac_far"] > 0.2
+    still = PR.from_positions(np.broadcast_to(pos[..., :1], pos.shape) + np.linspace(0, 1, T), 1.0, N)
+    assert abs(PR.long_summaries(still)["C_drift"]) < 1e-9
+
+
+def test_closed_loop_drives_follow_real_drives(drives):
+    from shepherd import scenario as SC
+    from shepherd.model import Params
+
+    sim = SC.closed_loop_drives(drives, Params(), n_runs=2, seed=0, dt=1.0,
+                                dog={"l_drive": 4.0, "flank_sigma": 2.0, "flank_tau": 2.7, "tau_d": 2.0})
+    real = SC.real_long_segments(drives, dt=1.0)
+    assert [s.label for s in sim] == [s.label for s in real]
+    for s, r in zip(sim, real):
+        assert s.pos.shape == (2, *r.pos.shape)

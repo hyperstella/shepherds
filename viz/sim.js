@@ -1,15 +1,19 @@
 // Herding model of Jadhav et al. (2024), ported from shepherd/model.py
-// (itself a port of model/herding_model.m). Two optional additions that
-// are NOT in the paper: `zigAmp` (lateral zigzag of the dog's drive point)
-// and `outrun` (the dog circles the flock instead of cutting through it).
-// With zigAmp = 0 and outrun = false this is the published model.
+// (itself a port of model/herding_model.m), including the extensions used for
+// calibration: time step dt with heading relaxation (tauS, tauD), separate
+// dog noise, random sideways flanking of the drive point (Ornstein-Uhlenbeck,
+// flankSigma/flankTau), a dog speed law (dogSpeedGain) and "social always on".
+// With the defaults this is the published model. `outrun` (the dog circles the
+// flock instead of cutting through it when the target switches) is an
+// addition for the viewer's back-and-forth scenario only.
 
 const DEFAULTS = {
   n: 14, rRep: 2, rDog: 12, K: 10, nAtt: 4, nAli: 1,
   vSheep: 1, vDog: 1.5, wInertia: 0.5, wRep: 2, wDog: 1, noise: 0.3,
   wAtt: 1.5, wAli: 1.3, slowStep: 0.05,
   lSep: null, lDrive: null, lCollect: null, // null = paper's defaults from rRep and n
-  zigAmp: 0, zigPeriod: 7, outrun: false,
+  dt: 1, tauS: null, tauD: null, noiseDog: null, // null = no relaxation / same noise as sheep
+  flankSigma: 0, flankTau: 2, dogSpeedGain: null, socialAlways: false, outrun: false,
 };
 
 const MODE = { INIT: 0, DRIVE: 1, COLLECT: 2, SLOW: 3 };
@@ -19,6 +23,7 @@ function resolveParams(p) {
   if (q.lSep == null) q.lSep = q.rRep * Math.pow(q.n, 2 / 3);
   if (q.lDrive == null) q.lDrive = q.rRep * Math.sqrt(q.n);
   if (q.lCollect == null) q.lCollect = q.rRep;
+  if (q.noiseDog == null) q.noiseDog = q.noise;
   q.K = Math.min(q.K, q.n - 1);
   q.nAtt = Math.min(q.nAtt, q.K);
   q.nAli = Math.min(q.nAli, q.nAtt);
@@ -26,6 +31,18 @@ function resolveParams(p) {
 }
 
 function norm2(x, y) { const m = Math.hypot(x, y); return m > 0 ? [x / m, y / m] : [0, 0]; }
+
+function gauss(rng) { // Box-Muller
+  const u = Math.max(rng(), 1e-12), v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// Turn part of the way from the old heading toward the desired one (a = dt / tau).
+function relax(ox, oy, nx, ny, tau, dt) {
+  if (tau == null || tau <= dt) return [nx, ny];
+  const a = dt / tau;
+  return norm2((1 - a) * ox + a * nx, (1 - a) * oy + a * ny);
+}
 
 // start: {x, y} flock start centre, spread (m); dogOffset: extra distance of dog start
 function createSim(params, start, target, rng = Math.random) {
@@ -37,7 +54,7 @@ function createSim(params, start, target, rng = Math.random) {
     vx: new Float64Array(N), vy: new Float64Array(N),
     dx: 0, dy: 0, dvx: 1, dvy: 0,
     target: { x: target.x, y: target.y },
-    mode: MODE.INIT, aim: { x: 0, y: 0 },
+    mode: MODE.INIT, aim: { x: 0, y: 0 }, flank: 0,
   };
   const spread = 3 * p.rRep * Math.max(1, Math.sqrt(N / 14));
   for (let i = 0; i < N; i++) {
@@ -58,6 +75,7 @@ const _scratch = { idx: null, dist: null };
 
 function step(s) {
   const { p, N, rng } = s;
+  const dt = p.dt;
   const x0 = Float64Array.from(s.x), y0 = Float64Array.from(s.y);
   const vx0 = Float64Array.from(s.vx), vy0 = Float64Array.from(s.vy);
   const dx0 = s.dx, dy0 = s.dy;
@@ -80,16 +98,19 @@ function step(s) {
 
     const tdx = dx0 - x0[i], tdy = dy0 - y0[i];
     const dd = Math.hypot(tdx, tdy);
+    const seesDog = dd <= p.rDog;
     let nvx, nvy;
-    if (dd > p.rDog) {
+    if (!seesDog && !p.socialAlways) {
       // grazing: only collision avoidance moves the sheep
       if (nRep) {
         [nvx, nvy] = norm2(p.wInertia * vx0[i] + p.wRep * rep[0], p.wInertia * vy0[i] + p.wRep * rep[1]);
-        s.x[i] = x0[i] + p.vSheep * nvx; s.y[i] = y0[i] + p.vSheep * nvy;
+        [nvx, nvy] = relax(vx0[i], vy0[i], nvx, nvy, p.tauS, dt);
+        s.x[i] = x0[i] + p.vSheep * dt * nvx; s.y[i] = y0[i] + p.vSheep * dt * nvy;
         s.vx[i] = nvx; s.vy[i] = nvy;
       }
       continue;
     }
+    const wD = seesDog ? p.wDog : 0; // with socialAlways, the dog only acts within rDog
     // K nearest (index 0 after a stable sort is the sheep itself)
     idx.sort((a, b) => dist[a] - dist[b] || a - b);
     const knn = idx.slice(1, p.K + 1);
@@ -115,10 +136,11 @@ function step(s) {
     [lx, ly] = norm2(lx, ly);
     const th = 2 * Math.PI * rng();
     [nvx, nvy] = norm2(
-      p.wInertia * vx0[i] + p.wRep * rep[0] - p.wDog * tdx / dd + p.wAtt * ax + p.noise * Math.cos(th) + p.wAli * lx,
-      p.wInertia * vy0[i] + p.wRep * rep[1] - p.wDog * tdy / dd + p.wAtt * ay + p.noise * Math.sin(th) + p.wAli * ly,
+      p.wInertia * vx0[i] + p.wRep * rep[0] - wD * tdx / dd + p.wAtt * ax + p.noise * Math.cos(th) + p.wAli * lx,
+      p.wInertia * vy0[i] + p.wRep * rep[1] - wD * tdy / dd + p.wAtt * ay + p.noise * Math.sin(th) + p.wAli * ly,
     );
-    s.x[i] = x0[i] + p.vSheep * nvx; s.y[i] = y0[i] + p.vSheep * nvy;
+    [nvx, nvy] = relax(vx0[i], vy0[i], nvx, nvy, p.tauS, dt);
+    s.x[i] = x0[i] + p.vSheep * dt * nvx; s.y[i] = y0[i] + p.vSheep * dt * nvy;
     s.vx[i] = nvx; s.vy[i] = nvy;
   }
 
@@ -129,8 +151,12 @@ function step(s) {
     gx += x0[i]; gy += y0[i];
   }
   gx /= N; gy /= N;
+  if (p.flankSigma > 0) {
+    const af = dt / p.flankTau;
+    s.flank = s.flank * (1 - af) + p.flankSigma * Math.sqrt(2 * af) * gauss(rng);
+  }
   if (minD <= p.rRep) {
-    s.dx = dx0 + p.slowStep * s.dvx; s.dy = dy0 + p.slowStep * s.dvy;
+    s.dx = dx0 + p.slowStep * dt * s.dvx; s.dy = dy0 + p.slowStep * dt * s.dvy;
     s.mode = MODE.SLOW;
   } else {
     let far = 0, farD = -1;
@@ -147,21 +173,21 @@ function step(s) {
       const ux = gx - s.target.x, uy = gy - s.target.y, g = Math.hypot(ux, uy);
       aimX = s.target.x + (g + p.lDrive) * ux / g;
       aimY = s.target.y + (g + p.lDrive) * uy / g;
-      if (p.zigAmp > 0) {
-        const off = p.zigAmp * Math.sin(2 * Math.PI * s.t / p.zigPeriod);
-        aimX += off * (-uy / g); aimY += off * (ux / g);
-      }
+      if (p.flankSigma > 0) { aimX += s.flank * (-uy / g); aimY += s.flank * (ux / g); }
       s.mode = MODE.DRIVE;
     }
     s.aim.x = aimX; s.aim.y = aimY;
     let [ox, oy] = norm2(aimX - dx0, aimY - dy0);
     if (p.outrun) [ox, oy] = outrunDirection(s, gx, gy, aimX, aimY, dx0, dy0, ox, oy);
     const th = 2 * Math.PI * rng();
-    const [vx, vy] = norm2(ox + p.noise * Math.cos(th), oy + p.noise * Math.sin(th));
-    s.dx = dx0 + p.vDog * vx; s.dy = dy0 + p.vDog * vy;
+    let [vx, vy] = norm2(ox + p.noiseDog * Math.cos(th), oy + p.noiseDog * Math.sin(th));
+    [vx, vy] = relax(s.dvx, s.dvy, vx, vy, p.tauD, dt);
+    let vd = p.vDog;
+    if (p.dogSpeedGain != null) vd = Math.min(vd, p.dogSpeedGain * Math.hypot(aimX - dx0, aimY - dy0));
+    s.dx = dx0 + vd * dt * vx; s.dy = dy0 + vd * dt * vy;
     s.dvx = vx; s.dvy = vy;
   }
-  s.t += 1;
+  s.t += dt;
   return s;
 }
 

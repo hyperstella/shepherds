@@ -225,6 +225,29 @@ def summaries(seg, chunk=64):
     return out
 
 
+LONG_KEYS = ["C_med", "nnd_med", "P_med", "P_p25", "E_med", "C_drift", "frac_far"]
+
+
+def long_summaries(seg, far=5.0):
+    """Long-horizon flock statistics (batch axes allowed).
+
+    C_drift: median cohesion in the last third minus the first third (m);
+    a flock that falls apart has C_drift >> 0. frac_far: share of sheep-time
+    farther than `far` m from the flock centre. Plus the usual C, nnd, P, E.
+    """
+    base = summaries(seg)
+    N = seg.n_sheep
+    C = M.cohesion(seg.pos, N)
+    T = C.shape[-1]
+    k = max(1, T // 3)
+    out = {key: base[key] for key in ("C_med", "nnd_med", "P_med", "P_p25", "E_med")}
+    out["C_drift"] = np.median(C[..., -k:], axis=-1) - np.median(C[..., :k], axis=-1)
+    b = M.barycenter(seg.pos, N)
+    d = np.linalg.norm(seg.pos[..., :N, :, :] - b[..., None, :, :], axis=-2)
+    out["frac_far"] = (d > far).mean(axis=(-2, -1))
+    return out
+
+
 def aggregate(summary_list, durations):
     """Duration-weighted mean over segments, ignoring NaN, per key."""
     w = np.asarray(durations, float)

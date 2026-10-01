@@ -99,6 +99,43 @@ def _job(args):
     return _summarize(segs, n, stats)
 
 
+def _job_multi(args):
+    """Both horizons for one chunk: replayed-dog windows and closed-loop long drives."""
+    theta, base, dt, seed, stats, window_kw, dog = args
+    n = len(next(iter(theta.values())))
+    segs = SC.replay_windows(_drives(), base, n_runs=n, seed=seed, dt=dt, per_run=theta, **window_kw)
+    short = _summarize(segs, n, stats)
+    longs = SC.closed_loop_drives(_drives(), base, n_runs=n, seed=seed + 500_000, dt=dt, per_run=theta, dog=dog)
+    lt = np.empty((n, len(longs), len(PR.LONG_KEYS)), np.float32)
+    for j, sg in enumerate(longs):
+        sm = PR.long_summaries(sg)
+        lt[:, j, :] = np.stack([np.broadcast_to(sm[k], (n,)) for k in PR.LONG_KEYS], axis=-1)
+    return short, lt
+
+
+def simulate_table_multi(theta, base=Params(), dt=1.0, seed=0, chunk=250, workers=None, stats=PR.SUMMARY_KEYS,
+                         window_kw=None, dog=None):
+    """Short (windows) and long (closed-loop drives) tables for every parameter set."""
+    n = len(next(iter(theta.values())))
+    jobs = [({k: v[i:i + chunk] for k, v in theta.items()}, base, dt, seed + i, list(stats), window_kw or {}, dog)
+            for i in range(0, n, chunk)]
+    workers = workers or max(1, (os.cpu_count() or 2) - 2)
+    if workers == 1:
+        parts = [_job_multi(j) for j in jobs]
+    else:
+        with ProcessPoolExecutor(workers) as ex:
+            parts = list(ex.map(_job_multi, jobs))
+    return np.concatenate([p[0] for p in parts]), np.concatenate([p[1] for p in parts])
+
+
+def long_meta(dt):
+    """Durations, sessions and the data's long-horizon statistics for the closed-loop drives."""
+    segs = SC.real_long_segments(_drives(), dt=dt)
+    obs = np.stack([np.stack([PR.long_summaries(s)[k] for k in PR.LONG_KEYS]) for s in segs]).astype(float)
+    return {"labels": np.array([s.label for s in segs]), "sessions": np.array([s.session for s in segs]),
+            "durations": np.array([s.duration for s in segs]), "obs": obs}
+
+
 def _job_kernel(args):
     theta, model, c_base, dt, seed, stats, window_kw = args
     from . import kernels as KN

@@ -106,7 +106,7 @@ select { font: 400 14px var(--f-body); color: var(--ink); background: var(--pane
 .note { margin: 0; font-size: 13.5px; color: var(--muted); }
 .note strong { color: var(--ink); font-weight: 600; }
 
-.presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .presets button { font: 600 13px/1.2 var(--f-body); padding: 9px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
 .presets button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .sliders { display: grid; gap: 14px; }
@@ -237,16 +237,12 @@ footer a { color: inherit; }
         <span><i class="key ring"></i>Distance at which sheep notice the dog</span>
         <span><i class="key flock"></i>Flock centre and heading</span>
       </div>
-      <p class="caption" id="sim-caption">The dog drives the flock back and forth between posts A and B, 60 m apart as in the experiment. Tap the field to move the post it is heading for. One model step is one second.</p>
+      <p class="caption" id="sim-caption">The dog drives the flock back and forth between posts A and B, 60 m apart as in the experiment. Tap the field to move the post it is heading for.</p>
     </div>
     <aside class="rail" aria-label="Model settings">
       <div class="group">
         <h2>Starting point</h2>
-        <div class="presets" role="group" aria-label="Presets">
-          <button type="button" data-preset="paper" aria-pressed="true">Paper model</button>
-          <button type="button" data-preset="tight" aria-pressed="false">Tighter flock</button>
-          <button type="button" data-preset="flank" aria-pressed="false">Flanking dog</button>
-        </div>
+        <div class="presets" id="presets" role="group" aria-label="Presets"></div>
         <p class="note" id="preset-note"></p>
       </div>
       <div class="sliders" id="sim-sliders"></div>
@@ -277,6 +273,9 @@ footer a { color: inherit; }
 
 <script>
 /*__DATA__*/
+</script>
+<script>
+/*__PRESETS__*/
 </script>
 <script>
 /*__SIM__*/
@@ -552,74 +551,121 @@ footer a { color: inherit; }
   // =====================================================================
   // Simulator
   // =====================================================================
-  const PRESETS = {
-    paper: { n: 14, rRep: 2, wAtt: 1.5, wAli: 1.3, wInertia: 0.5, noise: 0.3, rDog: 12, wDog: 1, lDrive: 7.5, vDog: 1.5, lSep: 11.6, zigAmp: 0, zigPeriod: 8, outrun: false },
-    tight: { n: 14, rRep: 0.8, wAtt: 1.5, wAli: 1.3, wInertia: 0.5, noise: 0.3, rDog: 12, wDog: 1, lDrive: 4, vDog: 1.5, lSep: 4.7, zigAmp: 0, zigPeriod: 8, outrun: true },
-    flank: { n: 14, rRep: 0.8, wAtt: 1.5, wAli: 1.3, wInertia: 1.5, noise: 0.3, rDog: 12, wDog: 0.3, lDrive: 4, vDog: 1.5, lSep: 4.7, zigAmp: 6, zigPeriod: 8, outrun: true },
-  };
-  const PRESET_NOTES = {
-    paper: "The model exactly as the authors coded it. Its flock is loose (cohesion about 2.8 m against 1.2 m in the real drives) and the dog stays 5 to 9 m back, almost straight behind.",
-    tight: "Personal space cut to 0.8 m and the dog's drive distance to 4 m. In test runs cohesion fell to about 1.4 m and the dog's distances landed inside the real range. The dog still sits straight behind the flock.",
-    flank: "Adds a 6 m zigzag, weaker flight from the dog and more heading inertia. In test runs the dog worked the flanks about as often as the real collie, at the cost of a less aligned flock (polarization 0.77 against 0.85).",
-  };
+  const MEASURED_DOG = { lDrive: 4.2, vDog: 3.0, tauD: 2.2, flankSigma: 2.5, flankTau: 2.7, dogSpeedGain: 0.39, noiseDog: 0.3, lSep: 11.6, lCollect: 2.0 };
+  const PAPER = { n: 14, dt: 1, vSheep: 1, rRep: 2, wAtt: 1.5, wAli: 1.3, wInertia: 0.5, wRep: 2, noise: 0.3, rDog: 12, wDog: 1,
+    tauS: null, lDrive: 7.5, vDog: 1.5, lSep: 11.6, lCollect: 2, tauD: null, flankSigma: 0, flankTau: 2.7, dogSpeedGain: null,
+    noiseDog: 0.3, socialAlways: false, outrun: false, scenario: "loop" };
+  const CAL = window.CALIBRATED_PRESETS || {};
+  const PRESETS = { paper: { label: "Paper model", params: PAPER,
+    note: "The model exactly as the authors coded it, with their dog: drive point 7.5 m behind the flock, 1.5 m/s, instant turns. Its flock is loose (cohesion about 2.8 m against 1.2 m in the real drives) and the dog stays almost straight behind." } };
+  for (const [k, v] of Object.entries(CAL)) PRESETS[k] = { label: v.label, note: v.note, params: { ...PAPER, ...v.params } };
+
+  const WEIGHT_KEYS = ["wInertia", "wRep", "wDog", "wAtt", "wAli", "noise"];
   const SLIDERS = [
     { group: "Flock" },
     { k: "n", label: "Number of ewes", min: 5, max: 100, step: 1, d: 0 },
-    { k: "rRep", label: "Personal space", unit: "m", min: 0.4, max: 3, step: 0.1, d: 1 },
-    { k: "wAtt", label: "Pull toward neighbours", min: 0, max: 3, step: 0.1, d: 1 },
-    { k: "wAli", label: "Copying a neighbour's heading", min: 0, max: 3, step: 0.1, d: 1 },
-    { k: "wInertia", label: "Keeping own heading", min: 0, max: 3, step: 0.1, d: 1 },
-    { k: "noise", label: "Random wobble", min: 0, max: 1.5, step: 0.05, d: 2 },
+    { k: "rRep", label: "Personal space", unit: "m", min: 0.1, max: 3, step: 0.05, d: 2 },
+    { k: "rDog", label: "Sheep notice the dog within", unit: "m", min: 3, max: 30, step: 0.5, d: 1 },
+    { k: "tauS", label: "Time to turn to a new heading", unit: "s", min: 0, max: 3, step: 0.05, d: 2, zero: "instant" },
+    { k: "socialAlways", label: "Sheep keep moving when the dog is far (paper's modified model)", check: true },
+    { group: "How each ewe picks its heading (only the shares matter)" },
+    { k: "wAli", label: "Copy a neighbour's heading", log: true },
+    { k: "wAtt", label: "Pull toward neighbours", log: true },
+    { k: "wRep", label: "Push away when too close", log: true },
+    { k: "wDog", label: "Flee the dog", log: true },
+    { k: "wInertia", label: "Keep own heading", log: true },
+    { k: "noise", label: "Random wobble", log: true },
     { group: "Dog" },
-    { k: "rDog", label: "Sheep notice the dog within", unit: "m", min: 3, max: 30, step: 1, d: 0 },
-    { k: "wDog", label: "Sheep flee the dog", min: 0, max: 3, step: 0.05, d: 2 },
-    { k: "lDrive", label: "Dog's distance behind the flock", unit: "m", min: 1, max: 15, step: 0.1, d: 1 },
-    { k: "lSep", label: "Dog fetches a ewe that strays past", unit: "m", min: 2, max: 20, step: 0.1, d: 1 },
-    { k: "vDog", label: "Dog speed", unit: "m/s", min: 0.5, max: 4, step: 0.1, d: 1 },
-    { group: "Not in the paper", addition: true },
-    { k: "zigAmp", label: "Dog zigzag, side to side", unit: "m", min: 0, max: 10, step: 0.5, d: 1 },
-    { k: "zigPeriod", label: "Zigzag period", unit: "s", min: 2, max: 20, step: 1, d: 0 },
-    { k: "outrun", label: "Dog runs around the flock when the post switches", check: true },
+    { k: "lDrive", label: "Distance behind the flock", unit: "m", min: 1, max: 15, step: 0.1, d: 1 },
+    { k: "vDog", label: "Top speed", unit: "m/s", min: 0.5, max: 4, step: 0.1, d: 1 },
+    { k: "dogSpeedGain", label: "Speed per metre from its aim", unit: "/s", min: 0, max: 1, step: 0.01, d: 2, zero: "always top speed" },
+    { k: "tauD", label: "Time to turn toward its aim", unit: "s", min: 0, max: 4, step: 0.1, d: 1, zero: "instant" },
+    { k: "flankSigma", label: "Side-to-side flanking", unit: "m SD", min: 0, max: 6, step: 0.1, d: 1, zero: "none" },
+    { k: "flankTau", label: "Flanking memory", unit: "s", min: 0.5, max: 8, step: 0.1, d: 1 },
+    { k: "lSep", label: "Fetches a ewe that strays past", unit: "m", min: 2, max: 20, step: 0.1, d: 1 },
+    { group: "Simulation", addition: true },
+    { k: "scenario", label: "Scenario", choice: [["drives", "Re-run the real drives (closed loop)"], ["loop", "Back and forth between A and B"]] },
+    { k: "dt", label: "Model time step", choice: [[1, "1 s (as published)"], [0.2, "0.2 s"]] },
+    { k: "outrun", label: "Dog runs around the flock when the post switches (viewer only)", check: true },
   ];
 
-  const SV = { running: !reduceMotion, sps: 6, follow: true, cam: { x: 0, y: 0, s: 20 }, snap: true, dirty: true, acc: 0, preset: "paper", params: { ...PRESETS.paper }, posts: [{ x: -30, y: 0 }, { x: 30, y: 0 }], active: 1, trips: 0 };
+  const START = PRESETS.calibrated ? "calibrated" : "paper";
+  const SV = { running: !reduceMotion, sps: 6, follow: true, cam: { x: 0, y: 0, s: 20 }, snap: true, dirty: true, acc: 0, preset: START, params: { ...PRESETS[START].params }, posts: [{ x: -30, y: 0 }, { x: 30, y: 0 }], active: 1, trips: 0 };
   SV.c = makeCanvas($("#sim-canvas"), () => { SV.snap = true; SV.dirty = true; });
+
+  // presets
+  const presetBox = $("#presets");
+  for (const [key, pr] of Object.entries(PRESETS)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.preset = key; b.textContent = pr.label;
+    b.addEventListener("click", () => {
+      SV.preset = key; SV.params = { ...pr.params }; resetSim(); syncSliders();
+      const warm = Math.round(300 / SV.params.dt);
+      for (let i = 0; i < warm; i++) stepOnce(); // fill the comparison right away
+      drawCharts(); SV.dirty = true;
+    });
+    presetBox.appendChild(b);
+  }
 
   // sliders
   const sliderBox = $("#sim-sliders");
   let group;
+  const toSlider = (s, v) => (s.log ? Math.log10(Math.max(v, 1e-3)) : v == null ? 0 : v);
+  const fromSlider = (s, x) => (s.log ? Math.pow(10, x) : s.zero && x === 0 ? null : x);
   for (const s of SLIDERS) {
     if (s.group) {
       group = document.createElement("div"); group.className = "group" + (s.addition ? " addition" : "");
       group.innerHTML = `<h3>${s.group}</h3>`; sliderBox.appendChild(group); continue;
     }
-    const row = document.createElement("div"); row.className = s.check ? "checks" : "slider";
-    if (s.check) row.innerHTML = `<label><input type="checkbox" id="p-${s.k}"> ${s.label}</label>`;
-    else row.innerHTML = `<div class="slider-top"><label for="p-${s.k}">${s.label}</label><output id="o-${s.k}"></output></div><input type="range" id="p-${s.k}" min="${s.min}" max="${s.max}" step="${s.step}">`;
+    const row = document.createElement("div");
+    if (s.check) {
+      row.className = "checks";
+      row.innerHTML = `<label><input type="checkbox" id="p-${s.k}"> ${s.label}</label>`;
+    } else if (s.choice) {
+      row.className = "slider";
+      row.innerHTML = `<div class="slider-top"><label for="p-${s.k}">${s.label}</label></div><select id="p-${s.k}">` +
+        s.choice.map(([v, l]) => `<option value="${v}">${l}</option>`).join("") + `</select>`;
+    } else {
+      row.className = "slider";
+      const [mn, mx, st] = s.log ? [-3, 1.7, 0.01] : [s.min, s.max, s.step];
+      row.innerHTML = `<div class="slider-top"><label for="p-${s.k}">${s.label}</label><output id="o-${s.k}"></output></div><input type="range" id="p-${s.k}" min="${mn}" max="${mx}" step="${st}">`;
+    }
     group.appendChild(row);
-    const input = row.querySelector("input");
-    input.addEventListener("input", () => setParam(s.k, s.check ? input.checked : +input.value));
+    const input = row.querySelector("input, select");
+    input.addEventListener(s.choice ? "change" : "input", () =>
+      setParam(s.k, s.check ? input.checked : s.choice ? (isNaN(+input.value) ? input.value : +input.value) : fromSlider(s, +input.value)));
+  }
+  function shareOf(k) {
+    const tot = WEIGHT_KEYS.reduce((a, w) => a + SV.params[w], 0);
+    return tot > 0 ? SV.params[k] / tot : 0;
   }
   function syncSliders() {
     for (const s of SLIDERS) {
       if (!s.k) continue;
       const input = $("#p-" + s.k), v = SV.params[s.k];
-      if (s.check) input.checked = !!v;
-      else { input.value = v; $("#o-" + s.k).textContent = (+v).toFixed(s.d) + (s.unit ? " " + s.unit : ""); }
+      if (s.check) { input.checked = !!v; continue; }
+      if (s.choice) { input.value = String(v); continue; }
+      if (s.k === "n") input.disabled = SV.params.scenario === "drives";
+      input.value = toSlider(s, v);
+      const out = $("#o-" + s.k);
+      if (s.log) {
+        const sh = shareOf(s.k) * 100;
+        out.textContent = `${v < 0.01 ? v.toExponential(1) : v.toFixed(v < 1 ? 3 : 2)} · ${sh < 0.1 ? "<0.1" : sh < 1 ? sh.toFixed(1) : sh.toFixed(0)}%`;
+      } else if (s.k === "n" && SV.params.scenario === "drives") out.textContent = "14 (real drives)";
+      else out.textContent = v == null || (s.zero && v === 0) ? s.zero : (+v).toFixed(s.d) + (s.unit ? " " + s.unit : "");
     }
     document.querySelectorAll("[data-preset]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.preset === SV.preset)));
-    $("#preset-note").textContent = SV.preset ? PRESET_NOTES[SV.preset] : "Custom settings. Pick a starting point above to go back to a tested configuration.";
+    $("#preset-note").textContent = SV.preset ? PRESETS[SV.preset].note : "Custom settings. Pick a starting point above to go back to a tested configuration.";
+    $("#sim-caption").textContent = (SV.params.scenario === "drives"
+      ? "Each real drive of at least 20 s is re-run from its first frame (the real sheep and dog positions and headings). The model dog then drives toward the direction the real flock went. Tap the field to move the target. "
+      : "The dog drives the flock back and forth between posts A and B, 60 m apart as in the experiment. Tap the field to move the post it is heading for. ") +
+      `One model step is ${SV.params.dt === 1 ? "one second" : SV.params.dt + " s"}.`;
   }
   function setParam(k, v) {
     SV.params[k] = v; SV.preset = null;
-    if (k === "n") resetSim(); else SV.sim.p = resolveParams(SV.params);
+    if (k === "n" || k === "dt" || k === "scenario") resetSim(); else SV.sim.p = resolveParams(SV.params);
     resetStats(); syncSliders(); SV.dirty = true;
   }
-  document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
-    SV.preset = b.dataset.preset; SV.params = { ...PRESETS[SV.preset] }; resetSim(); syncSliders();
-    for (let i = 0; i < 400; i++) stepOnce(); // fill the comparison right away
-    drawCharts(); SV.dirty = true;
-  }));
 
   // stats
   const KEYS = ["C", "P", "E", "yRD", "xD", "psiBD"];
@@ -640,19 +686,44 @@ footer a { color: inherit; }
     SV.xDabs += Math.abs(vals.xD); if (vals.psiBD > 150) SV.rear++;
   }
 
+  // Real drives of at least 20 s, re-run from their first frame.
+  const LONG = D.drives.map((d, i) => i).filter((i) => D.drives[i].frames * DT >= 20);
+  function initDrive() {
+    const d = D.drives[LONG[SV.driveK]], last = d.frames - 1, ahead = Math.min(last, Math.round(1 / DT));
+    const s = createSim({ ...SV.params, n: NS }, { x: 0, y: 0 }, { x: 0, y: 0 });
+    let mx = 0, my = 0, g0x = 0, g0y = 0, g1x = 0, g1y = 0;
+    for (let i = 0; i < NS; i++) {
+      const [x0, y0] = posAt(d, 0, i), [x1, y1] = posAt(d, ahead, i), [xe, ye] = posAt(d, last, i);
+      s.x[i] = x0; s.y[i] = y0; g0x += x0 / NS; g0y += y0 / NS; g1x += xe / NS; g1y += ye / NS;
+      const m = Math.hypot(x1 - x0, y1 - y0);
+      if (m > 1e-6) { s.vx[i] = (x1 - x0) / m; s.vy[i] = (y1 - y0) / m; mx += s.vx[i]; my += s.vy[i]; } else { s.vx[i] = NaN; }
+    }
+    const mm = Math.hypot(mx, my) || 1;
+    for (let i = 0; i < NS; i++) if (Number.isNaN(s.vx[i])) { s.vx[i] = mx / mm; s.vy[i] = my / mm; }
+    const [dx0, dy0] = posAt(d, 0, DOG), [dx1, dy1] = posAt(d, ahead, DOG), dm = Math.hypot(dx1 - dx0, dy1 - dy0) || 1;
+    s.dx = dx0; s.dy = dy0; s.dvx = (dx1 - dx0) / dm; s.dvy = (dy1 - dy0) / dm;
+    const ux = g1x - g0x, uy = g1y - g0y, um = Math.hypot(ux, uy) || 1;
+    s.target = { x: g1x + (20 * ux) / um, y: g1y + (20 * uy) / um };
+    SV.sim = s; SV.driveEnd = last * DT; SV.driveLabel = `session ${d.session} drive ${d.index}`;
+    SV.prev = null; SV.snap = true;
+  }
   function resetSim() {
-    SV.active = 1; SV.trips = 0;
-    SV.sim = createSim(SV.params, { x: SV.posts[0].x - 5, y: SV.posts[0].y + 3, dogSpread: 15 }, SV.posts[1]);
+    SV.active = 1; SV.trips = 0; SV.driveK = 0;
+    if (SV.params.scenario === "drives") initDrive();
+    else SV.sim = createSim(SV.params, { x: SV.posts[0].x - 5, y: SV.posts[0].y + 3, dogSpread: 15 }, SV.posts[1]);
     SV.prev = null; SV.snap = true; SV.dirty = true; resetStats(); afterStep(false);
   }
   function afterStep(count = true) {
-    const s = SV.sim, o = observables(s);
+    let s = SV.sim;
+    const drives = SV.params.scenario === "drives";
+    if (drives && s.t >= SV.driveEnd) { SV.trips++; SV.driveK = (SV.driveK + 1) % LONG.length; initDrive(); s = SV.sim; }
+    const o = observables(s);
     const tgt = SV.posts[SV.active];
-    if (Math.hypot(o.gx - tgt.x, o.gy - tgt.y) < 5) { SV.active = 1 - SV.active; s.target = { ...SV.posts[SV.active] }; SV.trips++; }
+    if (!drives && Math.hypot(o.gx - tgt.x, o.gy - tgt.y) < 5) { SV.active = 1 - SV.active; s.target = { ...SV.posts[SV.active] }; SV.trips++; }
     const hx = Math.cos(o.heading), hy = Math.sin(o.heading), rx = s.dx - o.gx, ry = s.dy - o.gy;
     o.psiBD = (Math.abs(Math.atan2(hx * ry - hy * rx, hx * rx + hy * ry)) * 180) / Math.PI;
     SV.obs = o;
-    if (count && s.t > 30 && s.mode === MODE.DRIVE) accumulate(o);
+    if (count && s.t > (drives ? 3 : 30) && s.mode === MODE.DRIVE) accumulate(o);
   }
   function stepOnce() {
     const s = SV.sim;
@@ -664,7 +735,8 @@ footer a { color: inherit; }
   SV.c.el.addEventListener("pointerdown", (e) => {
     const r = SV.c.el.getBoundingClientRect();
     const [x, y] = toW(SV.cam, SV.c, e.clientX - r.left, e.clientY - r.top);
-    SV.posts[SV.active] = { x, y }; SV.sim.target = { x, y }; SV.dirty = true;
+    if (SV.params.scenario !== "drives") SV.posts[SV.active] = { x, y };
+    SV.sim.target = { x, y }; SV.dirty = true;
   });
 
   const MODE_TEXT = { 0: "Starting", 1: "Driving", 2: "Fetching a stray", 3: "Blocked by a ewe" };
@@ -679,7 +751,8 @@ footer a { color: inherit; }
     let want;
     if (SV.follow) { const span = Math.max(26, 2 * (p.lDrive + 3 * o.C) + 12); want = { x: gx, y: gy, s: Math.min(c.w, c.h) / span }; }
     else {
-      const xs = [SV.posts[0].x, SV.posts[1].x, gx, dx], ys = [SV.posts[0].y, SV.posts[1].y, gy, dy];
+      const pts = SV.params.scenario === "drives" ? [s.target] : SV.posts;
+      const xs = [...pts.map((q) => q.x), gx, dx], ys = [...pts.map((q) => q.y), gy, dy];
       const x0 = Math.min(...xs) - 12, x1 = Math.max(...xs) + 12, y0 = Math.min(...ys) - 12, y1 = Math.max(...ys) + 12;
       want = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, s: Math.min(c.w / (x1 - x0), c.h / (y1 - y0)) };
     }
@@ -687,8 +760,12 @@ footer a { color: inherit; }
     const cam = SV.cam, S = (x, y) => toS(cam, c, x, y);
     drawGround(c, cam);
 
-    // posts
-    SV.posts.forEach((pt, i) => {
+    // posts (back and forth) or the drive's target
+    if (SV.params.scenario === "drives") {
+      const [tx, ty] = S(s.target.x, s.target.y);
+      ctx.fillStyle = T.flock; ctx.beginPath(); ctx.arc(tx, ty, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.font = "600 12px " + T.mono; ctx.textBaseline = "bottom"; ctx.fillText("target", tx + 7, ty - 4);
+    } else SV.posts.forEach((pt, i) => {
       const [sx, sy] = S(pt.x, pt.y), active = i === SV.active;
       if (active) { ctx.setLineDash([4, 4]); ctx.strokeStyle = T.flock; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx, sy, 5 * cam.s, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
       ctx.fillStyle = active ? T.flock : T.muted; ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill();
@@ -713,8 +790,13 @@ footer a { color: inherit; }
       if (o.P > 0.2) arrow(ctx, sx, sy, ex, ey, 9, T.flock, 2.5); }
     scaleBar(c, cam);
 
-    $("#sim-mode").textContent = `${MODE_TEXT[s.mode]} toward ${SV.active ? "B" : "A"}`;
-    $("#sim-time").textContent = `t = ${s.t} s · ${SV.trips} trips · C ${fmt(o.C, 1)} m · P ${fmt(o.P)}`;
+    if (SV.params.scenario === "drives") {
+      $("#sim-mode").textContent = `${MODE_TEXT[s.mode]} · re-running ${SV.driveLabel}`;
+      $("#sim-time").textContent = `${s.t.toFixed(0)} of ${SV.driveEnd.toFixed(0)} s · drive ${SV.driveK + 1} of ${LONG.length} · C ${fmt(o.C, 1)} m · P ${fmt(o.P)}`;
+    } else {
+      $("#sim-mode").textContent = `${MODE_TEXT[s.mode]} toward ${SV.active ? "B" : "A"}`;
+      $("#sim-time").textContent = `t = ${s.t.toFixed(0)} s · ${SV.trips} trips · C ${fmt(o.C, 1)} m · P ${fmt(o.P)}`;
+    }
   }
 
   // ---------- comparison charts ----------
@@ -782,7 +864,7 @@ footer a { color: inherit; }
     ];
     $("#compare-table").innerHTML = rows.map(([a, b, c]) => `<tr><td>${a}</td><td class="num">${b}</td><td class="num">${c}</td></tr>`).join("");
     $("#stats-note").textContent = SV.n
-      ? `Based on ${SV.n.toLocaleString()} simulated seconds in which the dog is driving (the first 30 s after a restart are skipped). The statistics start over whenever you change a setting.`
+      ? `Based on ${Math.round(SV.n * SV.sim.p.dt).toLocaleString()} simulated seconds in which the dog is driving (${SV.params.scenario === "drives" ? "the first 3 s of each re-run drive" : "the first 30 s after a restart"} are skipped). The statistics start over whenever you change a setting.`
       : "Collecting statistics. They count only seconds in which the dog is driving, starting 30 s after a restart.";
     SV.chartsDirty = false;
   }
@@ -795,9 +877,9 @@ footer a { color: inherit; }
   let chartClock = 0;
   function tickSim(dt) {
     if (SV.running) {
-      SV.acc += dt * SV.sps;
+      SV.acc += (dt * SV.sps) / SV.sim.p.dt; // model steps owed
       let n = 0;
-      while (SV.acc >= 1 && n < 60) { stepOnce(); SV.acc -= 1; n++; }
+      while (SV.acc >= 1 && n < 300) { stepOnce(); SV.acc -= 1; n++; }
       if (n) SV.chartsDirty = true;
       drawSim(Math.min(1, SV.acc));
     } else if (SV.dirty || SV.follow) { drawSim(1); }
@@ -824,7 +906,7 @@ footer a { color: inherit; }
   readTheme();
   loadDrive(defaultDrive); sel.value = defaultDrive; syncDriveButton();
   resetSim(); syncSliders();
-  for (let i = 0; i < 700; i++) stepOnce(); // warm up so the charts open with data
+  for (let i = 0, warm = Math.round(500 / SV.params.dt); i < warm; i++) stepOnce(); // warm up so the charts open with data
   $("#sim-play").textContent = SV.running ? "Pause" : "Run";
   drawCharts();
   showTab(location.hash === "#sim" ? "sim" : "drives");

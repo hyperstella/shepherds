@@ -48,14 +48,11 @@ SIZES = (14, 50, 100)
 
 
 def sheep_posterior(n=N_DRAW, seed=0, model="M2tau"):
-    tab = dict(np.load(TABLES / f"{model}.npz"))
-    names = [str(k) for k in tab["names"]]
-    th = {k: tab[f"th2_{k}"] for k in names}
-    sims = ABC.aggregate(ABC.sanitize(tab["tab2"])[..., COLS], tab["meta_durations"])
-    obs = ABC.aggregate(ABC.sanitize(tab["meta_obs"])[None, :, COLS], tab["meta_durations"])[0]
-    post = ABC.fit(th, sims, obs, ABC.mad_scale(sims), MODELS[model]["priors"], 0.01)
-    pick = np.random.default_rng(seed).choice(len(post.samples[names[0]]), n, replace=False)
-    return {k: post.samples[k][pick] for k in names}
+    """Posterior draws of the sheep parameters (both horizons for multi-horizon tables)."""
+    import common
+
+    tab = common.load(model)
+    return common.draws(common.posterior(tab, model), n, seed)
 
 
 def dog_settings(N, measured):
@@ -136,14 +133,16 @@ def score(s):
 def main():
     drives = data.load_drives(data.load_sessions())
     measured = DP.estimate(drives)
-    sheep = sheep_posterior()
-    sheep_rep = {k: np.repeat(v, REPS) for k, v in sheep.items()}
-    out = {"measured_dog": measured, "sheep_posterior_median": {k: float(np.median(v)) for k, v in sheep.items()}}
+    rep = lambda d: {k: np.repeat(v, REPS) for k, v in d.items()}
+    m2t, m3, m3t = (rep(sheep_posterior(model=m)) for m in ("M2tau", "M3", "M3tau"))
+    out = {"measured_dog": measured}
     R = N_DRAW * REPS
     flocks = {  # name: (sheep per-run parameters, social always on, dt, sheep speed)
-        "calibrated M2tau, grazing": (sheep_rep, False, 0.2, V_SHEEP[0.2]),
-        "calibrated M2tau, social always on": (sheep_rep, True, 0.2, V_SHEEP[0.2]),
         "published sheep (M0)": ({}, False, 1.0, 1.0),
+        "calibrated M2tau (short horizon), grazing": (m2t, False, 0.2, V_SHEEP[0.2]),
+        "calibrated M3 (multi-horizon), grazing": (m3, False, 1.0, V_SHEEP[1.0]),
+        "calibrated M3tau (multi-horizon), grazing": (m3t, False, 0.2, V_SHEEP[0.2]),
+        "calibrated M3tau (multi-horizon), social always on": (m3t, True, 0.2, V_SHEEP[0.2]),
     }
     with ProcessPoolExecutor(max(1, (os.cpu_count() or 2) - 2)) as ex:
         for flock, (sheep_rep, social, dt, v_sheep) in flocks.items():
@@ -183,7 +182,7 @@ def plot(out):
     cols = {"Strömbom (published)": "#eb6834", "Data-derived dog": "#2a78d6", "Tuned heuristic": "#1baf7a"}
     metrics = [("success_rate", "Success within 300 s"), ("time_to_target_s_median", "Median time to target (s)"),
                ("cohesion_mean", "Mean cohesion C (m)"), ("dog_within_3m_frac", "Share of time dog < 3 m from a sheep")]
-    flocks = [k for k in out if k not in ("measured_dog", "sheep_posterior_median")]
+    flocks = [k for k in out if k != "measured_dog"]
     fig, axs = plt.subplots(len(flocks), 4, figsize=(18, 3.8 * len(flocks)))
     w = 0.26
     for row, flock in enumerate(flocks):

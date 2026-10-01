@@ -450,3 +450,48 @@ N = 14, 50 and 100, with 64 runs per condition. The tuned heuristic is chosen on
   50 or 100 sheep.
 - **This answers Q4 only partly.** A data-derived dog shows no performance advantage here, and a
   real test needs a flock model that is cohesive over long horizons.
+
+## Phase 3c: multi-horizon calibration (M3, M3τ)
+
+The short-window fits (M2, M2τ) fall apart over whole drives, because nothing in 12 s windows that
+start from real, cohesive flocks constrains cohesion. M3 and M3τ add a second horizon:
+- **The long runs:** every real drive of at least 20 s is re-run from its first frame for its full
+  length, in **closed loop** with the dog policy measured from the collie
+  (`scenario.closed_loop_drives`).
+- **The extra statistics:** flock-only, so the fixed dog model cannot bias the sheep parameters.
+  They are cohesion, nearest-neighbour distance, polarization, elongation, **cohesion drift** (end
+  minus start) and the **share of sheep more than 5 m from the centre**.
+
+Priors are on weight shares, as in M2. Run `experiments/build_table.py --model M3 | M3tau`, then
+`experiments/multi_horizon.py`.
+
+| | Held-out error (short windows) | Long drives: C | Drift | Far (> 5 m) | P | E | Hierarchy ρ, dog's rank |
+|---|---|---|---|---|---|---|---|
+| **Real flock** | — | **1.13** | **0.00** | **0.00** | **0.95** | **1.02** | **0.30, 15th** |
+| Published M0 | 3.1 | 2.90 | 0.35 | 0.08 | 0.83 | 0.70 | 0.09 |
+| M2 (short only, 1 s) | 0.86 | 3.18 | 1.81 | 0.16 | 0.81 | 0.88 | — |
+| **M3 (two horizons, 1 s)** | 0.87 | **2.42** | **1.35** | **0.09** | **0.95** | 0.75 | — |
+| M2τ (short only, 0.2 s) | 1.15 | 1.96 | 0.58 | 0.08 | 1.00 | 0.81 | 0.23, **1st** |
+| **M3τ (two horizons, 0.2 s)** | 1.15 | **1.71** | 0.70 | **0.05** | **0.98** | **0.94** | **0.20, 11th** |
+
+- **Adding the long horizon makes whole drives clearly more realistic at no cost on short windows.**
+  M3τ is the closest parametric model to the real flock over whole drives.
+- **The family still cannot hold the flock as tightly as real sheep do** (1.7 vs 1.1 m), and it
+  drifts slowly. Its attraction share stays under 1%: random-neighbour attraction looks
+  structurally too weak. The learned metric attraction kernel (Phase 4) is the better candidate
+  mechanism.
+- **The response to the dog is not identifiable from driving data.** The posterior share of
+  "flee the dog" is 0.7% (90% CI 0.2–2.4%) for M3, and below 0.1% for M3τ. Real drives start with
+  the flock already moving in the drive direction, so copying neighbours and inertia carry it, and
+  the data never require the dog's push. As a result, the calibrated flock **cannot be turned
+  around**: in the viewer's back-and-forth task it completes 0.2–0.3 trips per 10 minutes, against
+  5 for the published model. Identifying the dog response needs data where the dog changes the
+  flock's direction (collecting, turns at the posts) or a direct estimate from the tracks. The
+  learned dog kernels (Phase 4) are such an estimate.
+
+**The viewer** (`viz/`, republished) now opens on the **Calibrated** preset (M3τ posterior medians
+and the measured collie) in a new **"Re-run the real drives"** scenario, where the model is
+validated. The **back-and-forth** scenario and the **Short-horizon fit** preset are there to show
+the limits above. `viz/make_presets.py` regenerates the presets from the tables, and the JS
+simulator matches the Python model with all extensions on (cohesion 0.850 vs 0.849, P 0.935 vs
+0.934).

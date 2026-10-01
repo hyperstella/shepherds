@@ -93,6 +93,9 @@ def main():
     page = (HERE / "app.html").read_text()
     page = page.replace("/*__DATA__*/", "window.SHEEP_DATA = " + json.dumps(payload, separators=(",", ":")) + ";")
     page = page.replace("/*__SIM__*/", (HERE / "sim.js").read_text())
+    presets = HERE / "presets.json"
+    cal = json.loads(presets.read_text()) if presets.exists() else {}
+    page = page.replace("/*__PRESETS__*/", "window.CALIBRATED_PRESETS = " + json.dumps(cal, separators=(",", ":")) + ";")
     out = HERE / "sheep-and-collie.html"
     out.write_text(page)
     # Local preview copy: the publish step wraps the page in a UTF-8 skeleton, a plain file server does not.
