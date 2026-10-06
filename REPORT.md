@@ -378,6 +378,35 @@ flock's ρ is 0.30 in 15 s windows and 0.40 in 30 s windows.
    real flock's polarization and its hierarchy. This is also why the alignment-dominated calibrated
    parametric model shows no hierarchy.
 
+## Phase 8: draft phase labels for the unlabelled tracks
+
+Only 14.3 of the 76.3 tracked minutes are in the 29 hand-labelled drives. `shepherd/phases.py`
+proposes a label for every sample from the flock's and dog's geometry. The labels are, in priority
+order: **away** (dog more than 15 m from the barycenter), **idle** (smoothed flock speed under
+0.25 m/s), **turn** (flock heading changes by 120° or more within 10 s), **drive** (dog within
+60° of straight behind the flock), and **flank** (anything else: dog beside or ahead). Runs shorter
+than 5 s are merged into their neighbours. Run `experiments/label_phases.py`, which writes
+`results/labels/draft_phases.csv` (224 segments, with empty `reviewed_label` and `notes` columns
+for review), `results/label_phases.json` and `results/figures/label_phases.png`.
+
+| | drive | turn | flank | idle | away |
+|---|---|---|---|---|---|
+| Minutes, all tracks | 36.1 | 6.7 | 2.4 | 20.5 | 10.5 |
+| Minutes outside the hand-labelled drives | 23.6 | 5.2 | 2.4 | 20.2 | 10.5 |
+| Share of hand-labelled drive frames | 87% | 10% | 0% | 2% | 0% |
+
+- **The rules recover the hand labels.** 26 of 29 hand-labelled drives are mostly drafted as
+  drive, and all 29 are mostly drive or turn. Only 43% of the turn frames inside hand drives are
+  within 5 s of a drive's start or end, so some hand drives contain sharp mid-drive turns.
+- **There are about 10 minutes of candidate drives the authors did not use.** 20 draft drive
+  segments of 20 s or longer lie outside the hand labels. Flock speed (0.88 m/s), dog distance
+  (5.6 m) and cohesion (1.2 m) match the hand-labelled drives, but the shepherd is closer to the
+  flock (median 7 m against 14 m), which may be why they were left out. Review before using them.
+- **Turns (6.7 min, 41 segments) are the new material the dog-response fit needs** (Phase 3c).
+  Flank is rare (2.4 min). The model's collect behaviour has no clear counterpart in these tracks.
+- These are geometric proxies: the shepherd's commands were not recorded, so a label says where the
+  dog was, not what it was asked to do.
+
 ## Phase 7 (feasibility): a second dataset
 
 A desk check of public sources; nothing was downloaded.
@@ -531,3 +560,55 @@ uses M3τ posterior draws, the measured collie, and dt = 0.2 s.
 - **Viewer:** the Calibrated preset is now M3τ plus the learned dog response (g = 2). The JS port
   matches Python with the term on (C 0.581 vs 0.584, P 0.742 vs 0.739). M3τ without it is kept for
   contrast.
+
+## Feasibility: how many dogs, and what does cohesion change? (after Di Lorenzo et al., arXiv:2411.04791)
+
+Run `experiments/feasibility.py` (with `--no-micro` for the fast part) and `shepherd/feasibility.py`.
+This is their continuification feasibility idea with **measured** kernels and **cohesive** targets.
+
+**First-order kernels from the tracks.**
+- **Model:** sheep velocity = dog push f(r) away from the dog + sheep–sheep g(r) + diffusion D.
+- **Dog push:** the data cannot identify its range. All driving happens 3–7 m from the dog, and
+  cross-validated R² rises monotonically with range, from 0.30 at 3 m to 0.44 at 20 m. So we use
+  their form a·e^(−r/L) and sweep L = 2–8 m, with a fitted at each L (5.4 m/s at 2 m down to
+  1.8 m/s at 8 m).
+- **Cohesion g:** weak at first order: repulsion below about 1.5 m, then 0.01–0.04 m/s per
+  neighbour at 2–4 m. It is cut off at 3.6 m, the 95th percentile of observed pair distances.
+- **Diffusion D:** 0.25 m²/s from 1 s windows, rising to 0.68 from 4 s windows. The leftover motion
+  is persistent rather than diffusive.
+
+**Minimum dogs.** The goal is as tight as the real flock (95% of N sheep within 2.5·√(N/14) m). The
+dogs must supply the drift v* = D∇ln n* − g∗n*. We solve for non-negative dog numbers on rings
+around the goal (non-negative least squares). This avoids the periodic-box artifact of a literal
+port, which gave about 500 dogs for 14 sheep.
+
+| Range L | Cohesion | N=14 | N=30 | N=50 | N=100 | N=200 |
+|---|---|---|---|---|---|---|
+| 3 m | none (their assumption) | 10.0 | 6.0 | 4.9 | 5.1 | 6.9 |
+| 3 m | measured | **6.8** | 29.1* | 18.1* | 8.7* | 6.4* |
+| 5 m | none | 22.8 | 11.6 | 7.7 | 5.1 | 4.5 |
+| 5 m | measured | **12.6** | 6.8* | ~0† | 0† | 0† |
+| 8 m | none | 30.3 | 15.0 | 9.7 | 5.6 | 3.6 |
+| 8 m | measured | **21.6** | 3.1† | 0† | 0† | 0† |
+
+\* the dogs can produce the required drift only approximately (error 0.24–0.88). † no non-negative
+solution: attraction alone pulls the flock tighter than the goal, so dogs would have to push
+outward.
+
+1. **For a flock the size of the real one, measured cohesion cuts the continuum dog requirement by
+   30–45%** at every range tested. This is the main robust result.
+2. **For larger flocks** the cohesive case either needs no dogs to stay together (the flock
+   self-confines) or has no feasible solution. That relies on summing a 14-sheep pair kernel over
+   many more neighbours; whether real sheep attraction adds up this way is unknown.
+3. **The continuum limit fails at this scale.** In agent simulations with that many fixed dogs,
+   whether sampled from the predicted density or evenly spaced on its ring, only 0–34% of 14 sheep
+   stay in the goal (up to 70% of 30 sheep with 20 dogs). A few discrete dogs leave gaps
+   comparable to their push range, and sheep diffuse through them. The continuum counts are lower
+   bounds for many-herder systems (their paper uses 280), not dog numbers for a real flock.
+4. **None of this is two-way.** Both Di Lorenzo et al. and Catello et al. (arXiv:2511.21304) assume
+   herders that never sense the targets (feedforward or open loop), targets that ignore each other,
+   and coupling through herder positions only. The real system is two-way: the dog turns toward the
+   flock and follows its heading on short time scales, and sheep react to the dog's velocity and to
+   each other. A density-feedback continuification with velocity coupling and cohesion is the
+   natural theory extension. Our data provide its kernels, and also show it will need to work far
+   from the many-agent limit.

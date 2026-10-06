@@ -1,0 +1,222 @@
+{
+  "rules": {
+    "smooth_s": 2.0,
+    "idle_speed": 0.25,
+    "away_dist": 15.0,
+    "behind_deg": 120.0,
+    "turn_window_s": 10.0,
+    "turn_deg": 120.0,
+    "min_segment_s": 5.0
+  },
+  "minutes_total": 76.25833333333334,
+  "minutes_by_label": {
+    "drive": 36.1,
+    "turn": 6.7266666666666675,
+    "flank": 2.385,
+    "idle": 20.528333333333332,
+    "away": 10.518333333333334
+  },
+  "minutes_outside_hand_drives": {
+    "drive": 23.645,
+    "turn": 5.233333333333333,
+    "flank": 2.385,
+    "idle": 20.216666666666665,
+    "away": 10.518333333333334
+  },
+  "hand_drive_frames_by_label": {
+    "drive": 0.873422159887798,
+    "turn": 0.10472183263207106,
+    "flank": 0.0,
+    "idle": 0.021856007480130904,
+    "away": 0.0
+  },
+  "drive_recall": 0.873422159887798,
+  "drive_precision": 0.34501385041551247,
+  "hand_drives_mostly_drive": 26,
+  "hand_drives_mostly_drive_or_turn": 29,
+  "n_hand_drives": 29,
+  "per_drive": [
+    {
+      "session": 1,
+      "drive": 0,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 1,
+      "drive": 1,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 2,
+      "drive": 0,
+      "drive_frac": 0.685823754789272,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 2,
+      "drive": 1,
+      "drive_frac": 0.8393351800554016,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 2,
+      "drive": 2,
+      "drive_frac": 0.7165109034267912,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 2,
+      "drive": 3,
+      "drive_frac": 0.7142857142857143,
+      "drive_or_turn_frac": 0.9102990033222591
+    },
+    {
+      "session": 3,
+      "drive": 0,
+      "drive_frac": 0.5614617940199336,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 4,
+      "drive": 0,
+      "drive_frac": 0.6694214876033058,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 4,
+      "drive": 1,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 4,
+      "drive": 2,
+      "drive_frac": 0.9900249376558603,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 4,
+      "drive": 3,
+      "drive_frac": 0.43661971830985913,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 4,
+      "drive": 4,
+      "drive_frac": 0.7840531561461794,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 4,
+      "drive": 5,
+      "drive_frac": 0.9858156028368794,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 4,
+      "drive": 6,
+      "drive_frac": 0.9607843137254902,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 5,
+      "drive": 0,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 5,
+      "drive": 1,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 5,
+      "drive": 2,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 5,
+      "drive": 3,
+      "drive_frac": 0.945273631840796,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 5,
+      "drive": 4,
+      "drive_frac": 0.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 6,
+      "drive": 0,
+      "drive_frac": 0.3950617283950617,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 8,
+      "drive": 0,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 8,
+      "drive": 1,
+      "drive_frac": 0.6609686609686609,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 8,
+      "drive": 2,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 8,
+      "drive": 3,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 8,
+      "drive": 4,
+      "drive_frac": 0.8403908794788274,
+      "drive_or_turn_frac": 0.8403908794788274
+    },
+    {
+      "session": 8,
+      "drive": 5,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 9,
+      "drive": 0,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    },
+    {
+      "session": 9,
+      "drive": 1,
+      "drive_frac": 0.9063906390639064,
+      "drive_or_turn_frac": 0.9882988298829883
+    },
+    {
+      "session": 9,
+      "drive": 2,
+      "drive_frac": 1.0,
+      "drive_or_turn_frac": 1.0
+    }
+  ],
+  "n_segments": 224,
+  "n_segments_by_label": {
+    "drive": 90,
+    "turn": 41,
+    "flank": 17,
+    "idle": 60,
+    "away": 16
+  }
+}

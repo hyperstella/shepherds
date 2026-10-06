@@ -57,7 +57,8 @@ matches the Python version's statistics.
 | `shepherd/scenario.py` | simulated drives matched to real ones: the real dog replayed in 15 s windows that restart from the real flock |
 | `shepherd/abc.py` | NumPy ABC: Sobol reference tables, regression adjustment, coverage checks |
 | `shepherd/kernels.py` | learned interaction kernels: integral-form least squares, CV, synthetic data, forward simulation |
-| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models` (see REPORT.md) |
+| `shepherd/phases.py` | rule-based draft phase labels (drive, turn, flank, idle, away) for all tracked time |
+| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md) |
 | `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data) |
 | `reproduce.py` | regenerates the paper's Figs 1b–6 and the summary numbers |
 | `data/upstream/` | the authors' data, `.mat` files (used to verify the port) and MATLAB model, from commit `2c02a88` |
