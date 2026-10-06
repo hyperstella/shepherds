@@ -495,3 +495,39 @@ validated. The **back-and-forth** scenario and the **Short-horizon fit** preset 
 the limits above. `viz/make_presets.py` regenerates the presets from the tables, and the JS
 simulator matches the Python model with all extensions on (cohesion 0.850 vs 0.849, P 0.935 vs
 0.934).
+
+## Phase 3d: fixing the dog response with the learned dog kernels (M4τ)
+
+Driving data cannot identify how strongly sheep react to the dog (Phase 3c). The learned kernels
+(Phase 4) estimate that reaction directly from the tracks:
+
+a_dog = φ_D(r) ê_away + ψ_V(r) v_dog + ψ_L(r) · max(0, closing speed) · ê_away
+
+`model.Params.dog_kernel` adds it to the heading rule as a turn of dt · a_dog / v_sheep, weighted by
+the sum of the other weights times a gain g. The second-order model would rotate the heading by
+that much per step, so g = 1 is the direct translation. Run `experiments/dog_response.py`, which
+uses M3τ posterior draws, the measured collie, and dt = 0.2 s.
+
+| Gain g | Short-window error | Long drives: C | Drift | P | 90° turn test success |
+|---|---|---|---|---|---|
+| 0 (M3τ) | 1.04 | 1.71 m | 0.70 | 0.98 | 11% |
+| 1 | 0.86 | 1.96 m | 1.04 | 0.96 | 69% |
+| **2** | **0.78** | **1.44 m** | **0.40** | **0.94** | **75%** (about 70 s) |
+| 4 | 0.83 | 1.32 m | 0.21 | 0.94 | 34% |
+| Real flock | — | 1.13 m | 0.00 | 0.95 | — |
+
+- **g = 2 gives the best fit and makes the flock steerable.** It lowers the short-window error by
+  25%, brings long-drive cohesion and drift closer to the real flock, and raises the share of
+  successful 90° turns from 11% to 75%. A gain above 1 matches the synthetic finding that noisy
+  tracks shrink the learned kernels toward zero.
+- **Still missing:**
+  - the flock's turn away from a flanking dog (Fig 4a slope −0.27 vs −0.77);
+  - elongation (the flock is too wide);
+  - sustained cohesion over many 180° reversals. In the viewer's back-and-forth task: about 1 trip
+    per 10 min, against about 0.1 without the learned response and 5 for the published model.
+
+  All three point to the same gap: random-neighbour attraction is too weak. The natural next step
+  is to put the learned metric attraction kernel into the heading rule as well.
+- **Viewer:** the Calibrated preset is now M3τ plus the learned dog response (g = 2). The JS port
+  matches Python with the term on (C 0.581 vs 0.584, P 0.742 vs 0.739). M3τ without it is kept for
+  contrast.

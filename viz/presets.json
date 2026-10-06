@@ -24,6 +24,104 @@
       "vSheep": 1.289,
       "outrun": true,
       "socialAlways": false,
+      "dogKernel": {
+        "knots": [
+          0.0,
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          6.0,
+          7.0,
+          8.0,
+          10.0,
+          12.0,
+          15.0,
+          20.0
+        ],
+        "D": [
+          0.283714639533757,
+          0.24861904598767193,
+          0.21352108315959412,
+          0.17841214685694318,
+          0.14331000342058764,
+          0.1083050587785694,
+          0.07412686089658603,
+          0.04130102351788425,
+          0.00970211299792481,
+          -0.02107793245607062,
+          -0.05157120943427638,
+          -0.08200945076678805
+        ],
+        "V": [
+          -0.11956481583289352,
+          -0.12602488584354749,
+          -0.13246492518094133,
+          -0.13882346825934969,
+          -0.1448266384849093,
+          -0.1497207285294713,
+          -0.15198528770855585,
+          -0.15072713984695943,
+          -0.14671380770959436,
+          -0.14147823568893714,
+          -0.13609896707342314,
+          -0.13067139750953144
+        ],
+        "L": [
+          -0.0636357888976185,
+          -0.029769180191262134,
+          0.004096977581042286,
+          0.037931903817443484,
+          0.07167280592825083,
+          0.10525605459789013,
+          0.1388684139175081,
+          0.17286268667903962,
+          0.20742679783482681,
+          0.24247641721950866,
+          0.27775690382394486,
+          0.31309152257996653
+        ]
+      },
+      "gDogK": 2.0,
+      "scenario": "drives"
+    },
+    "check": {
+      "C_med": 1.4389124095672665,
+      "nnd_med": 0.32678789219543547,
+      "P_med": 0.9362811497251543,
+      "P_p25": 0.7988789782828992,
+      "E_med": 0.6715666057067353,
+      "C_drift": 0.3982004140332215,
+      "frac_far": 0.029537238983803865
+    },
+    "note": "Sheep rules fitted to the real drives on two horizons (15 s windows with the real dog replayed, and whole drives re-run in closed loop), at a 0.2 s step: 99.8% copying a neighbour, 0.1% avoiding collisions, <0.1% pull toward neighbours. The response to the dog comes from kernels learned directly from the tracks (flight from the dog, reaction to its velocity and to how fast it closes in), at gain 2, the best fit. The dog is the policy measured from the collie. On the real drives: cohesion 1.4 m, alignment 0.94 (real flock 1.13 m, 0.95). The learned dog response lets the dog turn the flock (a 90\u00b0 turn succeeds in 75% of runs, against 11% without it), but over many back-and-forth trips the flock still spreads out, because its attraction to neighbours stays weak."
+  },
+  "nodogk": {
+    "label": "Without learned dog response",
+    "params": {
+      "wInertia": 0.0043,
+      "wRep": 0.011,
+      "wDog": 0.0001,
+      "wAtt": 0.0031,
+      "wAli": 9.9775,
+      "noise": 0.0001,
+      "rRep": 0.133,
+      "rDog": 6.775,
+      "tauS": null,
+      "lDrive": 4.21,
+      "vDog": 3.025,
+      "tauD": 2.242,
+      "flankSigma": 2.507,
+      "flankTau": 2.722,
+      "dogSpeedGain": 0.385,
+      "noiseDog": 0.3,
+      "lSep": 11.6,
+      "lCollect": 2.0,
+      "dt": 0.2,
+      "vSheep": 1.289,
+      "outrun": true,
+      "socialAlways": false,
       "scenario": "drives"
     },
     "check": {
@@ -35,44 +133,7 @@
       "C_drift": 0.699769620704133,
       "frac_far": 0.04895189628014054
     },
-    "note": "Fitted to the real drives on two horizons (15 s windows with the real dog replayed, and whole drives re-run in closed loop with the dog policy measured from the collie), at a 0.2 s step. Heading rule: 99.8% copying a neighbour, 0.1% avoiding collisions, <0.1% pull toward neighbours, <0.1% fleeing the dog. Here it re-runs each real drive from its first frame. On these drives: cohesion 1.7 m and alignment 0.98 (real flock 1.13 m, 0.95). Its flight from the dog is tiny, because in real drives the flock is already moving the right way, so the data cannot tell how hard sheep react to the dog. Switch the scenario to back and forth to see it fail to turn the flock at the posts."
-  },
-  "calibrated1": {
-    "label": "Calibrated, 1 s step",
-    "params": {
-      "wInertia": 0.0255,
-      "wRep": 1.5388,
-      "wDog": 0.0741,
-      "wAtt": 0.0404,
-      "wAli": 8.1517,
-      "noise": 0.1283,
-      "rRep": 0.253,
-      "rDog": 6.857,
-      "lDrive": 4.21,
-      "vDog": 3.025,
-      "tauD": 2.242,
-      "flankSigma": 2.507,
-      "flankTau": 2.722,
-      "dogSpeedGain": 0.385,
-      "noiseDog": 0.3,
-      "lSep": 11.6,
-      "lCollect": 2.0,
-      "dt": 1.0,
-      "vSheep": 1.245,
-      "outrun": true,
-      "socialAlways": false,
-      "scenario": "drives"
-    },
-    "check": {
-      "C_med": 2.4207126937214487,
-      "nnd_med": 0.6358677984190929,
-      "P_med": 0.946670364052655,
-      "P_p25": 0.866679017721173,
-      "E_med": 0.7480857823933629,
-      "C_drift": 1.3485196746041588,
-      "frac_far": 0.09108752724390728
-    },
-    "note": "The same two-horizon fit at the published 1 s step. Heading rule: 81.5% copying a neighbour, 15.4% avoiding collisions, 0.4% pull toward neighbours, 0.7% fleeing the dog. On the real drives it keeps the flock aligned (P 0.95) but looser than the real one (cohesion 2.4 m vs 1.13 m)."
+    "note": "The same fitted sheep rules without the learned dog response: fleeing the dog gets <0.1% of the heading decision, because real drives start with the flock already moving the right way. On the real drives it looks fine (cohesion 1.7 m), but switch to back and forth and the dog cannot turn the flock at the posts."
   },
   "short": {
     "label": "Short-horizon fit",
@@ -109,6 +170,6 @@
       "C_drift": 1.80737569700154,
       "frac_far": 0.15667723400039624
     },
-    "note": "Fitted only on 15 s windows, at a 1 s step. Heading rule: 81.4% copying a neighbour, 17.2% avoiding collisions, 0.5% pull toward neighbours, 0.4% fleeing the dog. Nothing in short windows constrains cohesion, so over whole drives the flock comes apart (cohesion 3.2 m, 16% of sheep more than 5 m from the centre)."
+    "note": "Fitted only on 15 s windows, at a 1 s step: 81.4% copying a neighbour, 17.2% avoiding collisions, 0.5% pull toward neighbours. Nothing in short windows constrains cohesion, so over whole drives the flock comes apart (cohesion 3.2 m, 16% of sheep more than 5 m from the centre)."
   }
 }

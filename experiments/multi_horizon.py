@@ -52,9 +52,10 @@ def heldout(tab, name):
     return {"rms_z": float(np.sqrt(np.nanmean(per ** 2))), "per_stat": dict(zip(FIT_STATS, map(float, per)))}
 
 
-def long_check(drives, sheep, dt, dog, n=N_DRAW):
-    """Closed-loop long drives with the measured dog: pooled long-horizon statistics."""
-    base = Params(v_sheep=V_SHEEP[dt])
+def long_check(drives, sheep, dt, dog, n=N_DRAW, **extra):
+    """Closed-loop long drives with the measured dog: pooled long-horizon statistics.
+    extra: further Params fields (e.g. dog_kernel, g_dogk)."""
+    base = Params(v_sheep=V_SHEEP[dt], **extra)
     per = None if sheep is None else {k: np.asarray(v)[:n] for k, v in sheep.items()}
     segs = SC.closed_loop_drives(drives, base if sheep is not None else Params(), n, 3, dt, per_run=per, dog=dog)
     sm = [PR.long_summaries(s) for s in segs]

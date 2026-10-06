@@ -14,6 +14,7 @@ const DEFAULTS = {
   lSep: null, lDrive: null, lCollect: null, // null = paper's defaults from rRep and n
   dt: 1, tauS: null, tauD: null, noiseDog: null, // null = no relaxation / same noise as sheep
   flankSigma: 0, flankTau: 2, dogSpeedGain: null, socialAlways: false, outrun: false,
+  dogKernel: null, gDogK: 1, // learned dog response: {knots, D, V, L} (see shepherd/model.py)
 };
 
 const MODE = { INIT: 0, DRIVE: 1, COLLECT: 2, SLOW: 3 };
@@ -31,6 +32,17 @@ function resolveParams(p) {
 }
 
 function norm2(x, y) { const m = Math.hypot(x, y); return m > 0 ? [x / m, y / m] : [0, 0]; }
+
+// Hat-function kernel value at r (0 beyond the last knot), as in shepherd/kernels.py.
+function hat(knots, coef, r) {
+  let v = 0;
+  for (let m = 0; m < knots.length - 1; m++) {
+    const peak = knots[m], left = m === 0 ? knots[0] - (knots[1] - knots[0]) : knots[m - 1], right = knots[m + 1];
+    const b = Math.min((r - left) / (peak - left), (right - r) / (right - peak));
+    if (b > 0) v += b * coef[m];
+  }
+  return v;
+}
 
 function gauss(rng) { // Box-Muller
   const u = Math.max(rng(), 1e-12), v = rng();
@@ -54,7 +66,7 @@ function createSim(params, start, target, rng = Math.random) {
     vx: new Float64Array(N), vy: new Float64Array(N),
     dx: 0, dy: 0, dvx: 1, dvy: 0,
     target: { x: target.x, y: target.y },
-    mode: MODE.INIT, aim: { x: 0, y: 0 }, flank: 0,
+    mode: MODE.INIT, aim: { x: 0, y: 0 }, flank: 0, dogVx: 0, dogVy: 0,
   };
   const spread = 3 * p.rRep * Math.max(1, Math.sqrt(N / 14));
   for (let i = 0; i < N; i++) {
@@ -68,6 +80,7 @@ function createSim(params, start, target, rng = Math.random) {
   s.dy = start.y - dogSpread * rng();
   const td = 2 * Math.PI * rng();
   s.dvx = Math.cos(td); s.dvy = Math.sin(td);
+  s.dogVx = s.dvx * p.vDog; s.dogVy = s.dvy * p.vDog;
   return s;
 }
 
@@ -135,9 +148,19 @@ function step(s) {
     for (let k = 0; k < p.nAli; k++) { lx += vx0[att[k]]; ly += vy0[att[k]]; }
     [lx, ly] = norm2(lx, ly);
     const th = 2 * Math.PI * rng();
+    let kx = 0, ky = 0;
+    if (p.dogKernel && seesDog) {
+      const kn = p.dogKernel.knots, ex = -tdx / dd, ey = -tdy / dd; // unit vector dog -> sheep
+      const closing = Math.max(0, (s.dogVx - vx0[i] * p.vSheep) * ex + (s.dogVy - vy0[i] * p.vSheep) * ey);
+      const fD = hat(kn, p.dogKernel.D, dd), fV = hat(kn, p.dogKernel.V, dd), fL = hat(kn, p.dogKernel.L, dd);
+      const W = p.wInertia + p.wRep + p.wDog + p.wAtt + p.wAli + p.noise;
+      const k = (p.gDogK * W * dt) / p.vSheep;
+      kx = k * (fD * ex + fV * s.dogVx + fL * closing * ex);
+      ky = k * (fD * ey + fV * s.dogVy + fL * closing * ey);
+    }
     [nvx, nvy] = norm2(
-      p.wInertia * vx0[i] + p.wRep * rep[0] - wD * tdx / dd + p.wAtt * ax + p.noise * Math.cos(th) + p.wAli * lx,
-      p.wInertia * vy0[i] + p.wRep * rep[1] - wD * tdy / dd + p.wAtt * ay + p.noise * Math.sin(th) + p.wAli * ly,
+      p.wInertia * vx0[i] + p.wRep * rep[0] - wD * tdx / dd + p.wAtt * ax + p.noise * Math.cos(th) + p.wAli * lx + kx,
+      p.wInertia * vy0[i] + p.wRep * rep[1] - wD * tdy / dd + p.wAtt * ay + p.noise * Math.sin(th) + p.wAli * ly + ky,
     );
     [nvx, nvy] = relax(vx0[i], vy0[i], nvx, nvy, p.tauS, dt);
     s.x[i] = x0[i] + p.vSheep * dt * nvx; s.y[i] = y0[i] + p.vSheep * dt * nvy;
@@ -187,6 +210,7 @@ function step(s) {
     s.dx = dx0 + vd * dt * vx; s.dy = dy0 + vd * dt * vy;
     s.dvx = vx; s.dvy = vy;
   }
+  s.dogVx = (s.dx - dx0) / dt; s.dogVy = (s.dy - dy0) / dt;
   s.t += dt;
   return s;
 }

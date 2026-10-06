@@ -22,7 +22,7 @@ INIT, DRIVE, COLLECT, SLOW, REPLAY = 0, 1, 2, 3, 4
 PER_RUN_FIELDS = (
     "r_rep", "r_dog", "v_sheep", "v_dog", "w_inertia", "w_rep", "w_dog", "noise", "w_att", "w_ali",
     "dog_slow_step", "l_sep", "l_drive", "l_collect", "tau_s", "tau_d", "noise_dog",
-    "flank_sigma", "flank_tau", "dog_speed_gain",
+    "flank_sigma", "flank_tau", "dog_speed_gain", "g_dogk",
 )
 
 
@@ -64,6 +64,12 @@ class Params:
     # Paper's modified model (Supp. Sec. 3): social interactions are always on and
     # sheep keep moving; the dog term applies only within r_dog.
     social_always: bool = False
+    # Learned dog response (shepherd/kernels.py), as (knots, coef_D, coef_DV, coef_DL):
+    # the sheep's acceleration due to the dog, a = phi_D(r) e_away + psi_V(r) v_dog
+    # + psi_L(r) max(0, closing speed) e_away, enters the heading rule as a turn of
+    # about dt * a / v_sheep, weighted by the sum of the other weights times g_dogk.
+    dog_kernel: tuple | None = None
+    g_dogk: float = 1.0
 
     def resolved(self):
         n = self.n_sheep
@@ -214,6 +220,12 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
     P_s[..., 0], V_s[..., 0], P_d[..., 0], V_d[..., 0] = pos_s, vel_s, pos_d, vel_d
     flanking = bool(np.any(f["flank_sigma"] > 0))
     flank = np.zeros(R)
+    if p.dog_kernel is not None:
+        from .kernels import HatBasis
+
+        dk_basis = HatBasis(tuple(p.dog_kernel[0]))
+        dk_D, dk_V, dk_L = (np.asarray(c, float) for c in p.dog_kernel[1:])
+        dog_vel = vel_d.copy() if dog_path is not None else vel_d * c2["v_dog"]  # actual velocity, m/s
 
     for t in range(1, p.n_steps):
         d = _draw_step(rng, R, p)
@@ -257,6 +269,17 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
             c3["w_inertia"] * vel_s + c3["w_rep"] * rep + c3["w_dog"] * away
             + c3["w_att"] * s_att + c3["noise"] * noise + c3["w_ali"] * s_ali
         )
+        if p.dog_kernel is not None:
+            B = dk_basis(dog_dist)  # (R, N, K)
+            e = np.nan_to_num(away)  # unit vector from the dog to the sheep
+            v_sheep_now = c3["v_sheep"] if speed_path is None else speed_path[:, max(t - 1, 0), None, None]
+            closing = np.maximum(0.0, ((dog_vel[:, None, :] - vel_s * v_sheep_now) * e).sum(-1))
+            a_dog = ((B @ dk_D)[..., None] * e + (B @ dk_V)[..., None] * dog_vel[:, None, :]
+                     + ((B @ dk_L) * closing)[..., None] * e)
+            if p.social_always:
+                a_dog = np.where(sees_dog[..., None], a_dog, 0.0)
+            W = c3["w_inertia"] + c3["w_rep"] + c3["w_dog"] + c3["w_att"] + c3["noise"] + c3["w_ali"]
+            active = active + c3["g_dogk"] * W * dt * a_dog / v_sheep_now
         grazing = c3["w_inertia"] * vel_s + c3["w_rep"] * rep
         with np.errstate(invalid="ignore"):
             new_v = np.where(sees_dog[..., None], _unit(active), _unit(grazing))
@@ -272,6 +295,8 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
         if dog_path is not None:
             new_pos_d = dog_path[..., t]
             vel_d = (new_pos_d - pos_d) / dt
+            if p.dog_kernel is not None:
+                dog_vel = vel_d
             pos_s, vel_s, pos_d = new_pos_s, new_v, new_pos_d
             P_s[..., t], V_s[..., t], P_d[..., t], V_d[..., t] = pos_s, vel_s, pos_d, vel_d
             mode[:, t] = REPLAY
@@ -306,6 +331,8 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
             v_dog = np.minimum(v_dog, c2["dog_speed_gain"] * np.linalg.norm(aim - pos_d, axis=-1, keepdims=True))
         new_pos_d = np.where(slow[:, None], pos_d + c2["dog_slow_step"] * dt * vel_d, pos_d + v_dog * dt * dog_dir)
         vel_d = np.where(slow[:, None], vel_d, dog_dir)
+        if p.dog_kernel is not None:
+            dog_vel = (new_pos_d - pos_d) / dt
 
         pos_s, vel_s, pos_d = new_pos_s, new_v, new_pos_d
         P_s[..., t], V_s[..., t], P_d[..., t], V_d[..., t] = pos_s, vel_s, pos_d, vel_d
