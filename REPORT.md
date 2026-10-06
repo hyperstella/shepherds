@@ -600,11 +600,18 @@ outward.
 2. **For larger flocks** the cohesive case either needs no dogs to stay together (the flock
    self-confines) or has no feasible solution. That relies on summing a 14-sheep pair kernel over
    many more neighbours; whether real sheep attraction adds up this way is unknown.
-3. **The continuum limit fails at this scale.** In agent simulations with that many fixed dogs,
-   whether sampled from the predicted density or evenly spaced on its ring, only 0–34% of 14 sheep
-   stay in the goal (up to 70% of 30 sheep with 20 dogs). A few discrete dogs leave gaps
-   comparable to their push range, and sheep diffuse through them. The continuum counts are lower
-   bounds for many-herder systems (their paper uses 280), not dog numbers for a real flock.
+3. **Agent-level checks:** fixed dogs sampled from the predicted density, at L = 3 m (stored in
+   `results/feasibility.json`).
+   - **14 sheep: the continuum counts fail.** Even 2× the predicted number of dogs keeps at most 47%
+     of the sheep in the goal. A few discrete dogs leave gaps comparable to their push range, and
+     sheep diffuse through them.
+   - **50 sheep, without cohesion:** also fails. The predicted 5 dogs keep only 8% inside.
+   - **50 sheep, with measured cohesion: it starts to work.** The predicted 18 dogs keep 74% of the
+     sheep in the goal, and 36 keep 96%.
+
+   The continuum view becomes usable as the flock grows, but only once cohesion is included. For a
+   real-sized flock with one dog, the counts are lower bounds, not dog numbers. (Their paper uses
+   280 herders.)
 4. **None of this is two-way.** Both Di Lorenzo et al. and Catello et al. (arXiv:2511.21304) assume
    herders that never sense the targets (feedforward or open loop), targets that ignore each other,
    and coupling through herder positions only. The real system is two-way: the dog turns toward the
