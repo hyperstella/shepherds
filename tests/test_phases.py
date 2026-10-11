@@ -35,3 +35,22 @@ def test_hand_drives_are_drafted_as_drive_or_turn(sessions):
     names, hand = np.concatenate(names), np.concatenate(hand)
     assert (names[hand] == "drive").mean() > 0.8
     assert np.isin(names[hand], ["drive", "turn"]).mean() > 0.95
+
+
+def test_read_reviewed_matches_draft_and_prefers_reviewed_label(sessions, tmp_path):
+    s = sessions[0]
+    lab, segs = PH.label_session(s)
+    path = tmp_path / "reviewed.csv"
+    rows = ["session,start_s,end_s,label,reviewed_label,notes"]
+    rows += [f"{g.session},{g.start_s},{g.end_s},{g.label},," for g in segs]
+    rows.append(f"{s.number + 1},0.0,5.0,drive,,")  # other session, ignored
+    path.write_text("\n".join(rows) + "\n")
+    assert np.array_equal(PH.read_reviewed(path, s), lab)
+
+    rows[1] = rows[1].rstrip(",") + ",flank,"
+    rows.append(f"{s.number},1.0,2.0,unknown,,")  # not in LABELS, ignored
+    path.write_text("\n".join(rows) + "\n")
+    out = PH.read_reviewed(path, s)
+    first = slice(0, round(segs[0].end_s / data.DT))
+    assert (out[first] == PH.LABELS.index("flank")).all()
+    assert np.array_equal(out[first.stop :], lab[first.stop :])
