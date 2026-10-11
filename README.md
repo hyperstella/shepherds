@@ -45,6 +45,30 @@ matches the Python version's statistics.
 .venv/bin/python viz/build.py      # rebuild after changing viz/app.html or viz/sim.js
 ```
 
+## Video labeler
+
+`viz/labeler.html` is a small offline tool for labelling herding phases from video. It needs no
+build step: open it in a browser, then drop in a video (MP4/H.264 or WebM). The file never leaves
+your machine.
+
+- Press **1–5** to label from the playhead onward (drive, turn, flank, idle, away). **0** clears
+  the label. The playhead splits the current segment, so segments always tile the video.
+- Drag boundaries on the timeline and scroll over it to zoom. Click a segment to edit its times,
+  label or notes.
+- **Q / W / E** turn on point marks for the dog, shepherd or sheep: click the frame to place one.
+  Right-click removes a mark and **R** turns marking off.
+- Set the **session** and **offset** (tracking time = video time + offset) to line the video up
+  with the UWB data. **Import CSV** loads `results/labels/draft_phases.csv` (or an earlier export)
+  as a starting point. **Export segments** writes the same columns with times in tracking seconds.
+- Work autosaves in the browser for each video. Undo with Ctrl+Z.
+
+Read reviewed labels back as per-sample arrays:
+
+```python
+from shepherd import data, phases
+lab = phases.read_reviewed("session1_phases.csv", data.load_sessions()[0])  # -1 = unlabelled
+```
+
 ## Layout
 
 | Path | Contents |
@@ -59,7 +83,7 @@ matches the Python version's statistics.
 | `shepherd/kernels.py` | learned interaction kernels: integral-form least squares, CV, synthetic data, forward simulation |
 | `shepherd/phases.py` | rule-based draft phase labels (drive, turn, flank, idle, away) for all tracked time |
 | `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md) |
-| `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data) |
+| `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data); `labeler.html` (video labeler) |
 | `reproduce.py` | regenerates the paper's Figs 1b–6 and the summary numbers |
 | `data/upstream/` | the authors' data, `.mat` files (used to verify the port) and MATLAB model, from commit `2c02a88` |
 

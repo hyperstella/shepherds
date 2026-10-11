@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Herding Video Labeler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+/* Layout: video on the left with a segment timeline underneath; label rail on the right.
+   Everything runs locally: the video is opened from disk and never leaves the browser. */
+:root {
+  --bg: #eef1eb; --panel: #fafbf8; --ink: #17201a; --muted: #56625a; --line: #d3dbd0;
+  --chip: #e4eadf; --track: #e1e7dc; --flock: #2a78d6;
+  --drive: #2a78d6; --turn: #eb6834; --flank: #1baf7a; --idle: #a9a69e; --away: #8a6fd1;
+  --dog: #eb6834; --shepherd: #4a3aa7; --sheep: #ffffff; --point-edge: #17201a;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101511; --panel: #171e19; --ink: #e6ece5; --muted: #9aa79e; --line: #2a342d;
+    --chip: #202a23; --track: #1c2620; --flock: #3987e5;
+    --drive: #3987e5; --turn: #ee7440; --flank: #2bbd88; --idle: #6f7a72; --away: #9a82e0;
+    --dog: #ee7440; --shepherd: #9085e9; --point-edge: #0b100c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101511; --panel: #171e19; --ink: #e6ece5; --muted: #9aa79e; --line: #2a342d;
+  --chip: #202a23; --track: #1c2620; --flock: #3987e5;
+  --drive: #3987e5; --turn: #ee7440; --flank: #2bbd88; --idle: #6f7a72; --away: #9a82e0;
+  --dog: #ee7440; --shepherd: #9085e9; --point-edge: #0b100c; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.5 var(--f-body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 32px); padding-block: 20px 40px; display: grid; gap: 18px; }
+.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 32px; }
+.eyebrow { margin: 0; font: 500 11.5px/1.4 var(--f-mono); letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+h1 { margin: 0; font: 700 clamp(26px, 3.6vw, 38px)/1.05 var(--f-display); font-stretch: 112%; letter-spacing: -.01em; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.view { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.stage { display: grid; gap: 10px; min-width: 0; }
+.screen { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
+.screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.drop { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: #cfd8cf; border: 2px dashed #4b5a4f; border-radius: var(--radius); background: #121813; }
+.drop.over { border-color: var(--flock); color: #fff; }
+.drop p { margin: 6px 0 0; font-size: 14px; color: #93a196; }
+.badge { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; pointer-events: none; }
+.pill { font: 500 12px/1 var(--f-mono); padding: 6px 9px; border-radius: 999px; background: rgb(250 251 248 / .9); color: #17201a; }
+
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.readline { font: 400 12.5px/1.4 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+button.btn { font: 600 14px/1 var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+button.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); min-width: 84px; justify-content: center; }
+button.btn:hover { border-color: var(--muted); }
+button.btn:disabled { opacity: .45; cursor: default; }
+:focus-visible { outline: 2px solid var(--flock); outline-offset: 2px; }
+select, input[type="number"], input[type="text"], textarea { font: 400 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0; }
+textarea { resize: vertical; min-height: 54px; }
+
+.timeline { display: grid; gap: 4px; }
+.timeline canvas { width: 100%; height: 74px; display: block; border-radius: 8px; background: var(--track); cursor: pointer; touch-action: none; }
+.zoomline { display: flex; justify-content: space-between; gap: 8px; }
+
+.rail { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 16px; min-width: 0; }
+.rail h2 { margin: 0; font: 700 15px/1.2 var(--f-display); font-stretch: 112%; }
+.rail h3 { margin: 0 0 6px; font: 500 11px/1.3 var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.labels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.labels button, .pts button { font: 600 13px/1.2 var(--f-body); padding: 8px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; display: flex; align-items: center; gap: 6px; justify-content: center; }
+.labels kbd, .pts kbd { font: 500 11px var(--f-mono); color: var(--muted); }
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.pts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.pts button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.pts button[aria-pressed="true"] kbd { color: var(--bg); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fl { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.seg-empty { font-size: 13.5px; color: var(--muted); margin: 0; }
+.summary { display: grid; grid-template-columns: auto 1fr auto; gap: 3px 8px; font-size: 13px; align-items: center; }
+.summary b { font: 500 12.5px var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; color: var(--muted); margin: 0; }
+.keys dt { font: 500 12px var(--f-mono); color: var(--ink); }
+.keys dd { margin: 0; }
+details summary { cursor: pointer; font: 500 11px/1.3 var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+.toast.on { opacity: 1; }
+
+@media (max-width: 900px) {
+  .view { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Shepherds · labelling</p>
+      <h1>Herding video labeler</h1>
+      <p class="lede">Open a herding video, mark phase segments with the number keys, and click on the frame to mark the dog, shepherd or sheep. Export uses the <code>draft_phases.csv</code> columns, so the result lines up with the UWB tracks.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="open-video">Open video</button>
+      <button class="btn" id="import-csv">Import CSV</button>
+      <button class="btn" id="export-csv" disabled>Export segments</button>
+      <button class="btn" id="export-points" disabled>Export points</button>
+      <input type="file" id="video-file" accept="video/*" hidden>
+      <input type="file" id="csv-file" accept=".csv,text/csv" hidden>
+    </div>
+  </header>
+
+  <main class="view">
+    <section class="stage">
+      <div class="screen" id="screen">
+        <video id="video" playsinline preload="auto"></video>
+        <canvas id="overlay"></canvas>
+        <div class="badge" id="badge" hidden><span class="pill" id="badge-label"></span></div>
+        <div class="drop" id="drop">
+          <div><strong>Drop a video here</strong><p>or use “Open video”. MP4/WebM play in any browser; the file stays on this machine.</p></div>
+        </div>
+      </div>
+      <div class="transport">
+        <button class="btn primary" id="play" disabled>Play</button>
+        <button class="btn" id="back" title="Back one frame (←)" disabled>◀ frame</button>
+        <button class="btn" id="fwd" title="Forward one frame (→)" disabled>frame ▶</button>
+        <select id="rate" aria-label="Playback speed" style="width:auto">
+          <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option>
+          <option value="2">2×</option><option value="4">4×</option><option value="8">8×</option>
+        </select>
+        <span class="readline" id="clock">—</span>
+      </div>
+      <div class="timeline">
+        <canvas id="tl" aria-label="Segment timeline"></canvas>
+        <div class="zoomline readline"><span id="tl-left">0:00</span><span>scroll to zoom · drag a boundary to move it</span><span id="tl-right">0:00</span></div>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div>
+        <h3>Label from playhead <span style="text-transform:none">(splits the segment here)</span></h3>
+        <div class="labels" id="labels"></div>
+      </div>
+      <div>
+        <h3>Selected segment</h3>
+        <p class="seg-empty" id="seg-empty">Click a segment on the timeline.</p>
+        <div id="seg-form" hidden style="display:grid; gap:8px">
+          <div class="grid2">
+            <label class="fl">Start (s)<input type="number" id="seg-start" step="0.1"></label>
+            <label class="fl">End (s)<input type="number" id="seg-end" step="0.1"></label>
+          </div>
+          <label class="fl">Label<select id="seg-label"></select></label>
+          <label class="fl">Notes<textarea id="seg-notes" placeholder="e.g. dog lies down on whistle"></textarea></label>
+          <div style="display:flex; gap:8px">
+            <button class="btn" id="seg-goto">Go to start</button>
+            <button class="btn" id="seg-delete">Remove</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3>Point marks (click the frame)</h3>
+        <div class="pts" id="pts"></div>
+        <p class="note" style="margin-top:6px" id="pt-count">0 points. Right-click a point to remove it.</p>
+      </div>
+      <div>
+        <h3>Sync with tracking</h3>
+        <div class="grid2">
+          <label class="fl">Session<input type="number" id="session" min="1" step="1" value="1"></label>
+          <label class="fl">Offset (s)<input type="number" id="offset" step="0.1" value="0"></label>
+          <label class="fl">Frame rate<input type="number" id="fps" min="1" step="1" value="30"></label>
+          <label class="fl">Annotator<input type="text" id="annotator" placeholder="initials"></label>
+        </div>
+        <p class="note" style="margin-top:6px">Tracking time = video time + offset. CSV times are written in tracking time, so they match <code>draft_phases.csv</code>.</p>
+      </div>
+      <div>
+        <h3>Labelled time</h3>
+        <div class="summary" id="summary"></div>
+      </div>
+      <details>
+        <summary>Keyboard</summary>
+        <dl class="keys" style="margin-top:8px">
+          <dt>Space</dt><dd>play / pause</dd>
+          <dt>← →</dt><dd>one frame (Shift: 1 s, Alt: 10 s)</dd>
+          <dt>1–5</dt><dd>label from playhead</dd>
+          <dt>0</dt><dd>clear label from playhead</dd>
+          <dt>B</dt><dd>split at playhead</dd>
+          <dt>[ ]</dt><dd>jump to previous / next boundary</dd>
+          <dt>Del</dt><dd>remove the boundary nearest the playhead</dd>
+          <dt>Q W E R</dt><dd>point mark: dog, shepherd, sheep, off</dd>
+          <dt>, .</dt><dd>slower / faster</dd>
+          <dt>Ctrl+Z / Ctrl+Y</dt><dd>undo / redo</dd>
+        </dl>
+      </details>
+    </aside>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+// Same vocabulary as shepherd/phases.py LABELS.
+const LABELS = ["drive", "turn", "flank", "idle", "away"];
+const POINT_KINDS = [
+  { id: "dog", key: "q", name: "Dog" },
+  { id: "shepherd", key: "w", name: "Shepherd" },
+  { id: "sheep", key: "e", name: "Sheep" },
+];
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const video = $("video"), overlay = $("overlay"), tl = $("tl");
+
+// State. Segments are a sorted list of boundaries over [0, duration]; each piece has a label (or null) and notes.
+// pieces[i] spans [bounds[i], bounds[i+1]].
+let S = { bounds: [0, 1], pieces: [{ label: null, notes: "" }], points: [] };
+let duration = 0, videoName = "", selected = -1, pointKind = null;
+let view = { t0: 0, t1: 1 };
+const undo = [], redo = [];
+
+// --- helpers -------------------------------------------------------------
+const fps = () => Math.max(1, +$("fps").value || 30);
+const offset = () => +$("offset").value || 0;
+const fmt = (t) => {
+  if (!isFinite(t)) return "—";
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+};
+const round1 = (x) => Math.round(x * 10) / 10;
+function toast(msg) {
+  const el = $("toast"); el.textContent = msg; el.classList.add("on");
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 2200);
+}
+function snapshot() { undo.push(JSON.stringify(S)); if (undo.length > 200) undo.shift(); redo.length = 0; }
+function restore(from, to) {
+  if (!from.length) return;
+  to.push(JSON.stringify(S)); S = JSON.parse(from.pop());
+  selected = Math.min(selected, S.pieces.length - 1); changed();
+}
+function pieceAt(t) {
+  for (let i = 0; i < S.pieces.length; i++) if (t < S.bounds[i + 1]) return i;
+  return S.pieces.length - 1;
+}
+
+// --- segment edits -------------------------------------------------------
+function split(t) {
+  const eps = 0.5 / fps();
+  if (t <= eps || t >= duration - eps) return pieceAt(t);
+  const i = pieceAt(t);
+  if (Math.abs(S.bounds[i] - t) < eps) return i;
+  if (Math.abs(S.bounds[i + 1] - t) < eps) return i + 1;
+  S.bounds.splice(i + 1, 0, t);
+  S.pieces.splice(i + 1, 0, { ...S.pieces[i] });
+  return i + 1;
+}
+function merge() {
+  // Join neighbours that share a label and have no notes to keep apart.
+  for (let i = S.pieces.length - 1; i > 0; i--) {
+    const a = S.pieces[i - 1], b = S.pieces[i];
+    if (a.label === b.label && (!a.notes || !b.notes || a.notes === b.notes)) {
+      a.notes = a.notes || b.notes;
+      S.pieces.splice(i, 1); S.bounds.splice(i, 1);
+    }
+  }
+}
+function labelFromPlayhead(label) {
+  if (!duration) return;
+  snapshot();
+  const t = video.currentTime, i = split(t);
+  S.pieces[i].label = label;
+  merge();
+  selected = pieceAt(t + 1e-6);
+  changed();
+}
+function removeBoundaryNear(t) {
+  if (S.bounds.length <= 2) return;
+  let best = 1;
+  for (let k = 2; k < S.bounds.length - 1; k++) if (Math.abs(S.bounds[k] - t) < Math.abs(S.bounds[best] - t)) best = k;
+  snapshot();
+  // Keep the label of the earlier piece unless it is empty.
+  const a = S.pieces[best - 1], b = S.pieces[best];
+  a.label = a.label ?? b.label; a.notes = [a.notes, b.notes].filter(Boolean).join("; ");
+  S.bounds.splice(best, 1); S.pieces.splice(best, 1);
+  selected = best - 1; changed();
+}
+function setSegmentTimes(i, start, end) {
+  snapshot();
+  const lo = i > 0 ? S.bounds[i - 1] + 0.05 : 0, hi = i + 2 < S.bounds.length ? S.bounds[i + 2] - 0.05 : duration;
+  if (i > 0) S.bounds[i] = Math.min(Math.max(start, lo), S.bounds[i + 1] - 0.05);
+  if (i + 1 < S.bounds.length - 1) S.bounds[i + 1] = Math.max(Math.min(end, hi), S.bounds[i] + 0.05);
+  changed();
+}
+
+// --- persistence ---------------------------------------------------------
+const storeKey = () => `shepherds-labeler:${videoName}:${duration.toFixed(2)}`;
+function save() {
+  if (!duration) return;
+  const meta = { session: $("session").value, offset: $("offset").value, fps: $("fps").value, annotator: $("annotator").value };
+  try { localStorage.setItem(storeKey(), JSON.stringify({ S, meta })); } catch (_) { /* storage may be blocked */ }
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(storeKey());
+    if (!raw) return false;
+    const { S: s, meta } = JSON.parse(raw);
+    S = s;
+    for (const k of ["session", "offset", "fps", "annotator"]) if (meta[k] != null) $(k).value = meta[k];
+    return true;
+  } catch (_) { return false; }
+}
+
+// --- CSV -----------------------------------------------------------------
+function csvCell(v) { v = String(v ?? ""); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }
+function parseCSV(text) {
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  const head = rows.shift() || [];
+  return rows.filter((r) => r.some((x) => x !== "")).map((r) => Object.fromEntries(head.map((h, k) => [h.trim(), r[k] ?? ""])));
+}
+function download(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const baseName = () => (videoName.replace(/\.[^.]+$/, "") || "video");
+function exportSegments() {
+  const sess = $("session").value, off = offset(), who = $("annotator").value;
+  const lines = [["session", "start_s", "end_s", "label", "reviewed_label", "notes", "video", "video_start_s", "video_end_s", "annotator"].join(",")];
+  S.pieces.forEach((p, i) => {
+    if (!p.label) return;
+    const a = S.bounds[i], b = S.bounds[i + 1];
+    lines.push([sess, round1(a + off), round1(b + off), p.label, p.label, p.notes, videoName, a.toFixed(3), b.toFixed(3), who].map(csvCell).join(","));
+  });
+  download(`${baseName()}_phases.csv`, lines.join("\n") + "\n");
+  toast(`Exported ${lines.length - 1} segments`);
+}
+function exportPoints() {
+  const sess = $("session").value, off = offset(), w = video.videoWidth, h = video.videoHeight;
+  const lines = [["session", "t_s", "video_t_s", "frame", "kind", "x_px", "y_px", "x_norm", "y_norm", "video"].join(",")];
+  for (const p of [...S.points].sort((a, b) => a.t - b.t)) {
+    lines.push([sess, (p.t + off).toFixed(3), p.t.toFixed(3), Math.round(p.t * fps()), p.kind,
+      (p.x * w).toFixed(1), (p.y * h).toFixed(1), p.x.toFixed(5), p.y.toFixed(5), videoName].map(csvCell).join(","));
+  }
+  download(`${baseName()}_points.csv`, lines.join("\n") + "\n");
+  toast(`Exported ${lines.length - 1} points`);
+}
+function importCSV(text) {
+  if (!duration) { toast("Open the video first"); return; }
+  const rows = parseCSV(text);
+  const sess = $("session").value, off = offset();
+  // Use the reviewed label when present, as in draft_phases.csv; rows for other sessions are skipped.
+  const segs = rows
+    .filter((r) => !("session" in r) || r.session === "" || r.session === sess)
+    .map((r) => {
+      const hasVideo = r.video_start_s !== undefined && r.video_start_s !== "";
+      const a = hasVideo ? +r.video_start_s : +r.start_s - off, b = hasVideo ? +r.video_end_s : +r.end_s - off;
+      return { a, b, label: (r.reviewed_label || r.label || "").trim(), notes: r.notes || "" };
+    })
+    .filter((g) => isFinite(g.a) && isFinite(g.b) && g.b > 0 && g.a < duration && LABELS.includes(g.label))
+    .sort((x, y) => x.a - y.a);
+  if (!segs.length) { toast(`No rows for session ${sess} inside this video`); return; }
+  snapshot();
+  S.bounds = [0, duration]; S.pieces = [{ label: null, notes: "" }];
+  for (const g of segs) {
+    const a = Math.max(0, g.a), b = Math.min(duration, g.b);
+    const i = split(a); split(b);
+    for (let k = i; k < S.pieces.length && S.bounds[k] < b - 1e-6; k++) S.pieces[k] = { label: g.label, notes: g.notes };
+  }
+  merge(); changed();
+  toast(`Imported ${segs.length} segments for session ${sess}`);
+}
+
+// --- drawing -------------------------------------------------------------
+function fitCanvas(c) {
+  const r = c.getBoundingClientRect(), d = devicePixelRatio || 1;
+  if (c.width !== Math.round(r.width * d) || c.height !== Math.round(r.height * d)) {
+    c.width = Math.round(r.width * d); c.height = Math.round(r.height * d);
+  }
+  const g = c.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0);
+  return [g, r.width, r.height];
+}
+// Displayed video rectangle inside the overlay (object-fit: contain).
+function videoRect() {
+  const r = overlay.getBoundingClientRect(), vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+  const s = Math.min(r.width / vw, r.height / vh), w = vw * s, h = vh * s;
+  return { x: (r.width - w) / 2, y: (r.height - h) / 2, w, h };
+}
+const tx = (t, w) => ((t - view.t0) / (view.t1 - view.t0)) * w;
+const xt = (x, w) => view.t0 + (x / w) * (view.t1 - view.t0);
+function drawTimeline() {
+  const [g, w, h] = fitCanvas(tl);
+  g.clearRect(0, 0, w, h);
+  if (!duration) return;
+  const top = 16, band = h - top - 8;
+  // Ticks.
+  const span = view.t1 - view.t0, steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200];
+  const step = steps.find((s) => (s / span) * w > 70) || 1800;
+  g.font = `400 10px ${css("--f-mono")}`; g.fillStyle = css("--muted"); g.strokeStyle = css("--line");
+  for (let t = Math.ceil(view.t0 / step) * step; t <= view.t1; t += step) {
+    const x = tx(t, w); g.fillRect(x, top - 4, 1, 4); g.fillText(fmt(t).replace(/\.\d+$/, ""), x + 3, 10);
+  }
+  // Segments.
+  S.pieces.forEach((p, i) => {
+    const a = tx(S.bounds[i], w), b = tx(S.bounds[i + 1], w);
+    if (b < 0 || a > w) return;
+    g.fillStyle = p.label ? css(`--${p.label}`) : css("--panel");
+    g.globalAlpha = p.label ? 1 : 0.6;
+    g.fillRect(a, top, Math.max(1, b - a), band);
+    g.globalAlpha = 1;
+    if (b - a > 40 && p.label) {
+      g.fillStyle = "#fff"; g.font = `600 12px ${css("--f-body")}`;
+      g.fillText(p.label + (p.notes ? " •" : ""), a + 6, top + band / 2 + 4);
+    }
+    if (i === selected) { g.strokeStyle = css("--ink"); g.lineWidth = 2; g.strokeRect(a + 1, top + 1, b - a - 2, band - 2); }
+  });
+  g.fillStyle = css("--bg");
+  for (let k = 1; k < S.bounds.length - 1; k++) g.fillRect(tx(S.bounds[k], w) - 0.5, top, 1, band);
+  // Point marks as ticks along the top.
+  for (const p of S.points) { g.fillStyle = css(`--${p.kind}`); g.fillRect(tx(p.t, w) - 1, top - 3, 2, 3); }
+  // Playhead.
+  const x = tx(video.currentTime, w);
+  g.fillStyle = css("--ink"); g.fillRect(x - 1, 2, 2, h - 4);
+  g.beginPath(); g.moveTo(x - 5, 0); g.lineTo(x + 5, 0); g.lineTo(x, 7); g.fill();
+  $("tl-left").textContent = fmt(view.t0); $("tl-right").textContent = fmt(view.t1);
+}
+function drawOverlay() {
+  const [g, w, h] = fitCanvas(overlay);
+  g.clearRect(0, 0, w, h);
+  if (!duration) return;
+  const r = videoRect(), t = video.currentTime, half = 0.5 / fps();
+  for (const p of S.points) {
+    const dt = Math.abs(p.t - t);
+    if (dt > 2) continue;
+    // Points on this frame are solid; nearby ones fade so you can see recent placements while stepping.
+    g.globalAlpha = dt <= half ? 1 : 0.25 * (1 - dt / 2);
+    const x = r.x + p.x * r.w, y = r.y + p.y * r.h;
+    g.beginPath(); g.arc(x, y, p.kind === "sheep" ? 5 : 7, 0, Math.PI * 2);
+    g.fillStyle = css(`--${p.kind}`); g.fill();
+    g.lineWidth = 1.5; g.strokeStyle = css("--point-edge"); g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+function updateReadouts() {
+  const t = video.currentTime, f = Math.round(t * fps());
+  $("clock").textContent = duration
+    ? `${fmt(t)} / ${fmt(duration)} · frame ${f} · tracking ${fmt(t + offset())}`
+    : "—";
+  const p = duration ? S.pieces[pieceAt(t)] : null;
+  $("badge").hidden = !duration;
+  $("badge-label").textContent = p && p.label ? p.label : "unlabelled";
+  $("badge-label").style.color = p && p.label ? css(`--${p.label}`) : "";
+  $("play").textContent = video.paused ? "Play" : "Pause";
+}
+function updatePanel() {
+  const has = selected >= 0 && selected < S.pieces.length && duration;
+  $("seg-empty").hidden = has; $("seg-form").hidden = !has;
+  if (has) {
+    const p = S.pieces[selected];
+    const active = document.activeElement;
+    if (active !== $("seg-start")) $("seg-start").value = S.bounds[selected].toFixed(2);
+    if (active !== $("seg-end")) $("seg-end").value = S.bounds[selected + 1].toFixed(2);
+    $("seg-label").value = p.label || "";
+    if (active !== $("seg-notes")) $("seg-notes").value = p.notes || "";
+  }
+  const tot = Object.fromEntries(LABELS.map((l) => [l, 0]));
+  S.pieces.forEach((p, i) => { if (p.label) tot[p.label] += S.bounds[i + 1] - S.bounds[i]; });
+  const done = LABELS.reduce((s, l) => s + tot[l], 0);
+  $("summary").innerHTML = LABELS.map((l) => `<span class="sw" style="background:var(--${l})"></span><span>${l}</span><b>${fmt(tot[l]).replace(/\.\d+$/, "")}</b>`).join("")
+    + `<span></span><span>labelled</span><b>${duration ? Math.round((100 * done) / duration) : 0}%</b>`;
+  $("pt-count").textContent = `${S.points.length} point${S.points.length === 1 ? "" : "s"}. Right-click a point to remove it.`;
+}
+function changed() { drawTimeline(); drawOverlay(); updateReadouts(); updatePanel(); save(); }
+function frame() { drawTimeline(); drawOverlay(); updateReadouts(); if (!video.paused) requestAnimationFrame(frame); }
+
+// --- video ---------------------------------------------------------------
+function openVideo(file) {
+  if (!file) return;
+  if (video.src) URL.revokeObjectURL(video.src);
+  videoName = file.name;
+  video.src = URL.createObjectURL(file);
+}
+video.addEventListener("loadedmetadata", () => {
+  duration = video.duration;
+  S = { bounds: [0, duration], pieces: [{ label: null, notes: "" }], points: [] };
+  undo.length = 0; redo.length = 0; selected = -1;
+  const resumed = load();
+  view = { t0: 0, t1: duration };
+  $("drop").hidden = true;
+  for (const id of ["play", "back", "fwd", "export-csv", "export-points"]) $(id).disabled = false;
+  changed();
+  toast(resumed ? `Resumed saved labels for ${videoName}` : `Opened ${videoName}`);
+});
+video.addEventListener("error", () => toast("This browser cannot play that file; try MP4 (H.264) or WebM"));
+video.addEventListener("play", () => requestAnimationFrame(frame));
+video.addEventListener("pause", changed);
+video.addEventListener("seeked", () => { drawTimeline(); drawOverlay(); updateReadouts(); });
+function seek(t) {
+  if (!duration) return;
+  video.currentTime = Math.min(duration, Math.max(0, t));
+  // Keep the playhead in view when zoomed.
+  const span = view.t1 - view.t0;
+  if (video.currentTime < view.t0 || video.currentTime > view.t1) {
+    view.t0 = Math.max(0, Math.min(duration - span, video.currentTime - span / 2)); view.t1 = view.t0 + span;
+  }
+  drawTimeline(); updateReadouts();
+}
+const step = (n) => { video.pause(); seek(video.currentTime + n / fps()); };
+function togglePlay() { if (!duration) return; video.paused ? video.play() : video.pause(); }
+
+// --- timeline interaction ------------------------------------------------
+let drag = null;
+tl.addEventListener("pointerdown", (e) => {
+  if (!duration) return;
+  const r = tl.getBoundingClientRect(), x = e.clientX - r.left, t = xt(x, r.width);
+  // Grab a boundary within 6 px; otherwise select the segment and seek.
+  for (let k = 1; k < S.bounds.length - 1; k++) {
+    if (Math.abs(tx(S.bounds[k], r.width) - x) < 6) { snapshot(); drag = { k }; tl.setPointerCapture(e.pointerId); return; }
+  }
+  selected = pieceAt(t); seek(t); drag = { seek: true }; tl.setPointerCapture(e.pointerId); changed();
+});
+tl.addEventListener("pointermove", (e) => {
+  const r = tl.getBoundingClientRect(), x = e.clientX - r.left, t = xt(x, r.width);
+  if (!drag) {
+    let near = false;
+    for (let k = 1; k < S.bounds.length - 1; k++) if (Math.abs(tx(S.bounds[k], r.width) - x) < 6) near = true;
+    tl.style.cursor = near ? "ew-resize" : "pointer"; return;
+  }
+  if (drag.k) {
+    const k = drag.k, min = 1 / fps();
+    S.bounds[k] = Math.min(S.bounds[k + 1] - min, Math.max(S.bounds[k - 1] + min, t));
+    seek(S.bounds[k]); updatePanel();
+  } else seek(t);
+});
+tl.addEventListener("pointerup", () => { if (drag) { drag = null; changed(); } });
+tl.addEventListener("wheel", (e) => {
+  if (!duration) return;
+  e.preventDefault();
+  const r = tl.getBoundingClientRect(), t = xt(e.clientX - r.left, r.width);
+  const span = Math.min(duration, Math.max(2, (view.t1 - view.t0) * Math.exp(e.deltaY * 0.0015)));
+  const f = (t - view.t0) / (view.t1 - view.t0);
+  view.t0 = Math.max(0, Math.min(duration - span, t - f * span)); view.t1 = view.t0 + span;
+  drawTimeline();
+}, { passive: false });
+
+// --- overlay (point marks) -----------------------------------------------
+function framePos(e) {
+  const b = overlay.getBoundingClientRect(), r = videoRect();
+  return { x: (e.clientX - b.left - r.x) / r.w, y: (e.clientY - b.top - r.y) / r.h, r };
+}
+function nearestPoint(e) {
+  const { x, y, r } = framePos(e), half = 0.5 / fps(), t = video.currentTime;
+  let best = -1, bd = 12;
+  S.points.forEach((p, i) => {
+    if (Math.abs(p.t - t) > half) return;
+    const d = Math.hypot((p.x - x) * r.w, (p.y - y) * r.h);
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
+overlay.addEventListener("click", (e) => {
+  if (!duration) return;
+  if (!pointKind) { togglePlay(); return; }
+  const { x, y } = framePos(e);
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  snapshot();
+  // Dog and shepherd are single individuals: one mark per frame, replace the old one.
+  const half = 0.5 / fps(), t = video.currentTime;
+  if (pointKind !== "sheep") S.points = S.points.filter((p) => !(p.kind === pointKind && Math.abs(p.t - t) <= half));
+  S.points.push({ t, kind: pointKind, x, y });
+  changed();
+});
+overlay.addEventListener("contextmenu", (e) => {
+  const i = nearestPoint(e);
+  if (i < 0) return;
+  e.preventDefault(); snapshot(); S.points.splice(i, 1); changed();
+});
+
+// --- controls ------------------------------------------------------------
+$("labels").innerHTML = LABELS.map((l, i) => `<button data-label="${l}"><span class="sw" style="background:var(--${l})"></span>${l} <kbd>${i + 1}</kbd></button>`).join("")
+  + `<button data-label=""><span class="sw" style="background:var(--panel);border:1px solid var(--line)"></span>clear <kbd>0</kbd></button>`;
+$("labels").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) labelFromPlayhead(b.dataset.label || null); });
+$("seg-label").innerHTML = `<option value="">(unlabelled)</option>` + LABELS.map((l) => `<option>${l}</option>`).join("");
+$("pts").innerHTML = POINT_KINDS.map((k) => `<button data-kind="${k.id}" aria-pressed="false"><span class="sw" style="background:var(--${k.id});border:1px solid var(--point-edge)"></span>${k.name} <kbd>${k.key.toUpperCase()}</kbd></button>`).join("")
+  + `<button data-kind="" aria-pressed="true">Off <kbd>R</kbd></button>`;
+function setPointKind(k) {
+  pointKind = k || null;
+  for (const b of $("pts").querySelectorAll("button")) b.setAttribute("aria-pressed", String((b.dataset.kind || null) === pointKind));
+  overlay.style.cursor = pointKind ? "crosshair" : "pointer";
+}
+$("pts").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setPointKind(b.dataset.kind); });
+setPointKind(null);
+
+$("open-video").onclick = () => $("video-file").click();
+$("video-file").onchange = (e) => openVideo(e.target.files[0]);
+$("import-csv").onclick = () => $("csv-file").click();
+$("csv-file").onchange = async (e) => { const f = e.target.files[0]; if (f) importCSV(await f.text()); e.target.value = ""; };
+$("export-csv").onclick = exportSegments;
+$("export-points").onclick = exportPoints;
+$("play").onclick = togglePlay;
+$("back").onclick = () => step(-1);
+$("fwd").onclick = () => step(1);
+$("rate").onchange = () => { video.playbackRate = +$("rate").value; };
+for (const id of ["session", "offset", "fps", "annotator"]) $(id).addEventListener("change", changed);
+
+$("seg-label").onchange = () => { if (selected < 0) return; snapshot(); S.pieces[selected].label = $("seg-label").value || null; changed(); };
+$("seg-notes").oninput = () => { if (selected >= 0) { S.pieces[selected].notes = $("seg-notes").value; drawTimeline(); save(); } };
+$("seg-notes").onfocus = () => snapshot();
+$("seg-start").onchange = () => setSegmentTimes(selected, +$("seg-start").value, S.bounds[selected + 1]);
+$("seg-end").onchange = () => setSegmentTimes(selected, S.bounds[selected], +$("seg-end").value);
+$("seg-goto").onclick = () => seek(S.bounds[selected] + 1e-3);
+$("seg-delete").onclick = () => { if (selected < 0) return; snapshot(); S.pieces[selected] = { label: null, notes: "" }; merge(); selected = -1; changed(); };
+
+// Drag and drop.
+const drop = $("drop"), screen = $("screen");
+screen.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+screen.addEventListener("dragleave", () => drop.classList.remove("over"));
+screen.addEventListener("drop", (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  if (/\.csv$/i.test(f.name)) f.text().then(importCSV); else openVideo(f);
+});
+
+document.addEventListener("keydown", (e) => {
+  const tag = e.target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") { if (e.key === "Escape") e.target.blur(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? restore(redo, undo) : restore(undo, redo); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore(redo, undo); return; }
+  if (e.ctrlKey || e.metaKey || !duration) return;
+  const k = e.key.toLowerCase();
+  if (k === " ") { e.preventDefault(); togglePlay(); }
+  else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const dir = e.key === "ArrowLeft" ? -1 : 1;
+    if (e.altKey) { video.pause(); seek(video.currentTime + dir * 10); }
+    else if (e.shiftKey) { video.pause(); seek(video.currentTime + dir); }
+    else step(dir);
+  }
+  else if (/^[1-5]$/.test(k)) labelFromPlayhead(LABELS[+k - 1]);
+  else if (k === "0") labelFromPlayhead(null);
+  else if (k === "b") { snapshot(); split(video.currentTime); changed(); }
+  else if (k === "delete" || k === "backspace") { e.preventDefault(); removeBoundaryNear(video.currentTime); }
+  else if (k === "[" || k === "]") {
+    const t = video.currentTime, eps = 0.5 / fps();
+    const target = k === "[" ? [...S.bounds].reverse().find((b) => b < t - eps) : S.bounds.find((b) => b > t + eps);
+    if (target != null) { video.pause(); seek(target + 1e-3); }
+  }
+  else if (k === "," || k === ".") {
+    const opts = [...$("rate").options].map((o) => +o.value);
+    const i = opts.indexOf(+$("rate").value) + (k === "," ? -1 : 1);
+    if (i >= 0 && i < opts.length) { $("rate").value = opts[i]; video.playbackRate = opts[i]; toast(`${opts[i]}×`); }
+  }
+  else { const pk = POINT_KINDS.find((p) => p.key === k); if (pk) setPointKind(pk.id); else if (k === "r") setPointKind(null); }
+});
+addEventListener("resize", () => { drawTimeline(); drawOverlay(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", changed);
+changed();
+</script>
+</body>
+</html>

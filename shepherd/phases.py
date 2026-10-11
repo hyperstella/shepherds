@@ -130,3 +130,25 @@ def hand_drive_mask(session):
     for sl in session.drive_slices():
         mask[sl] = True
     return mask
+
+
+def read_reviewed(path, session):
+    """Per-sample label indices from a reviewed CSV (draft_phases.csv or viz/labeler.html export).
+
+    Uses `reviewed_label` where filled and `label` otherwise. Samples no row
+    covers are -1. Times are in tracking seconds, as in draft_phases.csv.
+    """
+    import csv
+
+    lab = np.full(session.pos.shape[-1], -1)
+    with open(path, newline="") as fh:
+        for row in csv.DictReader(fh):
+            if int(row["session"]) != session.number:
+                continue
+            name = (row.get("reviewed_label") or row["label"]).strip()
+            if name not in LABELS:
+                continue
+            a = max(0, round(float(row["start_s"]) / data.DT))
+            b = min(len(lab), round(float(row["end_s"]) / data.DT))
+            lab[a:b] = LABELS.index(name)
+    return lab
