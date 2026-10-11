@@ -45,28 +45,67 @@ matches the Python version's statistics.
 .venv/bin/python viz/build.py      # rebuild after changing viz/app.html or viz/sim.js
 ```
 
-## Video labeler
+## Labelling video with a local model
 
-`viz/labeler.html` is a small offline tool for labelling herding phases from video. It needs no
-build step: open it in a browser, then drop in a video (MP4/H.264 or WebM). The file never leaves
-your machine.
+`experiments/label_video.py` turns a herding video into clean data with no manual labelling. It
+runs on your machine:
 
-- Press **1–5** to label from the playhead onward (drive, turn, flank, idle, away). **0** clears
-  the label. The playhead splits the current segment, so segments always tile the video.
-- Drag boundaries on the timeline and scroll over it to zoom. Click a segment to edit its times,
-  label or notes.
-- **Q / W / E** turn on point marks for the dog, shepherd or sheep: click the frame to place one.
-  Right-click removes a mark and **R** turns marking off.
-- Set the **session** and **offset** (tracking time = video time + offset) to line the video up
-  with the UWB data. **Import CSV** loads `results/labels/draft_phases.csv` (or an earlier export)
-  as a starting point. **Export segments** writes the same columns with times in tracking seconds.
-- Work autosaves in the browser for each video. Undo with Ctrl+Z.
+1. **Detect and track.** A COCO-pretrained YOLO model (`yolo11n.pt`, downloaded once) finds
+   `sheep`, `dog` and `person` (taken as the shepherd), and ByteTrack links the boxes into tracks.
+2. **Clean.** Tracks shorter than 1 s are dropped, and each track takes its majority class.
+   Positions are converted to metres and resampled to 10 Hz like the UWB data. Gaps up to 1 s are
+   interpolated and the tracks are smoothed over 0.5 s. Dog and shepherd fragments are stitched
+   into one track each.
+3. **Simplify.** The flock centre, velocity (the mean of each sheep's own velocity), cohesion and
+   sheep count are computed alongside the dog and shepherd positions.
+4. **Label.** The phase rules in `shepherd/phases.py` (drive, turn, flank, idle, away) run on those
+   series. A dog out of shot counts as `away`, and the `dog_seen` column says how often it was
+   actually in view.
+
+```bash
+.venv/bin/pip install -r requirements-video.txt         # once; installs PyTorch + ultralytics
+.venv/bin/python experiments/label_video.py drive.mp4   # writes results/video/drive_*.csv
+```
+
+| Output | Contents |
+|---|---|
+| `_detections.csv` | raw tracked boxes; re-clean without the model via `--from-detections` |
+| `_tracks.csv` | cleaned tracks: `t_s, track, kind, x_m, y_m, x_norm, y_norm` every 0.1 s |
+| `_flock.csv` | `flock_x/y, flock_vx/vy, cohesion, n_sheep, dog_x/y, shepherd_x/y` every 0.1 s |
+| `_phases.csv` | phase segments in the `draft_phases.csv` columns, plus `n_sheep`, `dog_seen` and video times |
+
+Units matter: the phase thresholds are in metres and m/s. For oblique footage, pass
+`--homography h.json`, a 3×3 pixel-to-ground matrix. For top-down (drone) footage, pass
+`--px-per-m`. With neither, the scale is guessed from the median sheep box, assuming a 1.2 m
+sheep, which is only reasonable for top-down video. `--session` and `--offset` put the times on
+the UWB clock (tracking time = video time + offset). `--stride 2` halves the detector's work.
+`--model` takes fine-tuned weights, as long as they keep the COCO class ids.
+
+`tests/test_video.py` checks the cleaning and labelling without the model. It renders a real
+session as noisy top-down detections (missed frames, ID switches, false positives) and gets the
+same phase as the tracking-based labels on more than 99% of samples. How well the detector does
+depends on the footage. COCO models find sheep well from the ground and from low drones, but
+small, densely packed sheep in high aerial shots may need `--imgsz 1920` or a fine-tuned model.
+
+### Reviewing in the browser
+
+`viz/labeler.html` is the review tool. It needs no build step: open it in a browser and drop in
+the video together with its `_phases.csv` and `_tracks.csv`. The video stays on your machine.
+
+- Model tracks are drawn on the frame with 2 s trails, and model phases fill the timeline.
+- Press **1–5** to relabel from the playhead onward (drive, turn, flank, idle, away); **0**
+  clears the label. Drag boundaries on the timeline, scroll over it to zoom, and click a segment
+  to edit its times, label or notes.
+- **Q / W / E** turn on point marks for the dog, shepherd or sheep: click the frame to place one,
+  right-click to remove it, and press **R** to stop marking.
+- **Export segments** writes the reviewed phases (same columns, tracking time). Work autosaves in
+  the browser for each video, and Ctrl+Z undoes.
 
 Read reviewed labels back as per-sample arrays:
 
 ```python
 from shepherd import data, phases
-lab = phases.read_reviewed("session1_phases.csv", data.load_sessions()[0])  # -1 = unlabelled
+lab = phases.read_reviewed("drive_phases.csv", data.load_sessions()[0])  # -1 = unlabelled
 ```
 
 ## Layout
@@ -82,7 +121,8 @@ lab = phases.read_reviewed("session1_phases.csv", data.load_sessions()[0])  # -1
 | `shepherd/abc.py` | NumPy ABC: Sobol reference tables, regression adjustment, coverage checks |
 | `shepherd/kernels.py` | learned interaction kernels: integral-form least squares, CV, synthetic data, forward simulation |
 | `shepherd/phases.py` | rule-based draft phase labels (drive, turn, flank, idle, away) for all tracked time |
-| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md) |
+| `shepherd/video.py` | video → clean tracks: YOLO + ByteTrack detection, cleaning to metres at 10 Hz, flock series, phase labels |
+| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md), `label_video` (video → clean data) |
 | `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data); `labeler.html` (video labeler) |
 | `reproduce.py` | regenerates the paper's Figs 1b–6 and the summary numbers |
 | `data/upstream/` | the authors' data, `.mat` files (used to verify the port) and MATLAB model, from commit `2c02a88` |

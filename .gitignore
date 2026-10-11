@@ -5,3 +5,5 @@ viz/preview.html
 results/tables/
 .claude/
 .DS_Store
+results/video/
+*.pt

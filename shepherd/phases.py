@@ -39,9 +39,15 @@ class Rules:
 
 def features(pos, vel, n_sheep=data.N_SHEEP, dog=data.DOG, shepherd=data.SHEPHERD, rules=Rules()):
     """Per-sample features from (n, 2, T) arrays. All angles in degrees."""
+    bary = M.barycenter(pos, n_sheep)
+    return flock_features(vel[:n_sheep].mean(0), bary, pos[dog], pos[shepherd], M.cohesion(pos, n_sheep), rules)
+
+
+def flock_features(flock_vel, bary, dog_pos, shepherd_pos, cohesion, rules=Rules()):
+    """features() from flock-level (2, T) series, e.g. cleaned video tracks."""
     w = max(1, round(rules.smooth_s / data.DT))
-    vb = uniform_filter1d(vel[:n_sheep].mean(0), w, axis=-1)
-    r_bd = pos[dog] - M.barycenter(pos, n_sheep)
+    vb = uniform_filter1d(flock_vel, w, axis=-1)
+    r_bd = dog_pos - bary
     heading = np.unwrap(np.arctan2(vb[1], vb[0]))
     half = max(1, round(rules.turn_window_s / data.DT / 2))
     padded = np.pad(heading, half, mode="edge")
@@ -51,8 +57,8 @@ def features(pos, vel, n_sheep=data.N_SHEEP, dog=data.DOG, shepherd=data.SHEPHER
         "dog_dist": np.linalg.norm(r_bd, axis=0),
         "psi_bd": np.degrees(np.abs(M.signed_angle(vb.T, r_bd.T))),
         "heading_change": np.degrees(dturn),
-        "cohesion": M.cohesion(pos, n_sheep),
-        "shepherd_dist": np.linalg.norm(pos[shepherd] - M.barycenter(pos, n_sheep), axis=0),
+        "cohesion": cohesion,
+        "shepherd_dist": np.linalg.norm(shepherd_pos - bary, axis=0),
     }
 
 

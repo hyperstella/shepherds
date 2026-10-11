@@ -1,0 +1,5 @@
+# Optional: the local detector for experiments/label_video.py (YOLO + ByteTrack).
+# AGPL-3.0; installs PyTorch. Not needed for the rest of the project or its tests.
+-r requirements.txt
+ultralytics==8.4.175
+lap==0.5.13
