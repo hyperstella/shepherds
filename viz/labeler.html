@@ -104,7 +104,7 @@ details summary { cursor: pointer; font: 500 11px/1.3 var(--f-mono); text-transf
     <div>
       <p class="eyebrow">Shepherds · labelling</p>
       <h1>Herding video labeler</h1>
-      <p class="lede">Open a herding video, mark phase segments with the number keys, and click on the frame to mark the dog, shepherd or sheep. Export uses the <code>draft_phases.csv</code> columns, so the result lines up with the UWB tracks.</p>
+      <p class="lede">Open a herding video, then import the model's <code>_phases.csv</code> and <code>_tracks.csv</code> from <code>experiments/label_video.py</code> to review them, or label from scratch with the number keys. Export uses the <code>draft_phases.csv</code> columns, so the result lines up with the UWB tracks.</p>
     </div>
     <div class="actions">
       <button class="btn" id="open-video">Open video</button>
@@ -112,7 +112,7 @@ details summary { cursor: pointer; font: 500 11px/1.3 var(--f-mono); text-transf
       <button class="btn" id="export-csv" disabled>Export segments</button>
       <button class="btn" id="export-points" disabled>Export points</button>
       <input type="file" id="video-file" accept="video/*" hidden>
-      <input type="file" id="csv-file" accept=".csv,text/csv" hidden>
+      <input type="file" id="csv-file" accept=".csv,text/csv" multiple hidden>
     </div>
   </header>
 
@@ -123,7 +123,7 @@ details summary { cursor: pointer; font: 500 11px/1.3 var(--f-mono); text-transf
         <canvas id="overlay"></canvas>
         <div class="badge" id="badge" hidden><span class="pill" id="badge-label"></span></div>
         <div class="drop" id="drop">
-          <div><strong>Drop a video here</strong><p>or use “Open video”. MP4/WebM play in any browser; the file stays on this machine.</p></div>
+          <div><strong>Drop a video here</strong><p>with its <code>_phases.csv</code> and <code>_tracks.csv</code> if you have them, or use “Open video”. MP4/WebM play in any browser; the file stays on this machine.</p></div>
         </div>
       </div>
       <div class="transport">
@@ -167,6 +167,10 @@ details summary { cursor: pointer; font: 500 11px/1.3 var(--f-mono); text-transf
         <h3>Point marks (click the frame)</h3>
         <div class="pts" id="pts"></div>
         <p class="note" style="margin-top:6px" id="pt-count">0 points. Right-click a point to remove it.</p>
+        <div id="tracks-row" hidden style="display:flex; gap:14px; margin-top:8px; font-size:13.5px">
+          <label><input type="checkbox" id="show-tracks" checked> model tracks</label>
+          <label><input type="checkbox" id="show-ids"> track ids</label>
+        </div>
       </div>
       <div>
         <h3>Sync with tracking</h3>
@@ -219,6 +223,8 @@ const video = $("video"), overlay = $("overlay"), tl = $("tl");
 // pieces[i] spans [bounds[i], bounds[i+1]].
 let S = { bounds: [0, 1], pieces: [{ label: null, notes: "" }], points: [] };
 let duration = 0, videoName = "", selected = -1, pointKind = null;
+// Model tracks (from label_video.py _tracks.csv), bucketed by sample: bucket k holds [id, kind, x_norm, y_norm].
+let tracks = null;
 let view = { t0: 0, t1: 1 };
 const undo = [], redo = [];
 
@@ -361,9 +367,21 @@ function exportPoints() {
   download(`${baseName()}_points.csv`, lines.join("\n") + "\n");
   toast(`Exported ${lines.length - 1} points`);
 }
+function importTracks(rows) {
+  const dt = 0.1, buckets = [];
+  for (const r of rows) {
+    const k = Math.round(+r.video_t_s / dt);
+    (buckets[k] ||= []).push([r.track, r.kind, +r.x_norm, +r.y_norm]);
+  }
+  tracks = { dt, buckets, n: new Set(rows.map((r) => r.track)).size };
+  $("show-tracks").checked = true; $("tracks-row").hidden = false;
+  changed();
+  toast(`Loaded ${tracks.n} model tracks`);
+}
 function importCSV(text) {
   if (!duration) { toast("Open the video first"); return; }
   const rows = parseCSV(text);
+  if (rows.length && "track" in rows[0] && "x_norm" in rows[0]) { importTracks(rows); return; }
   const sess = $("session").value, off = offset();
   // Use the reviewed label when present, as in draft_phases.csv; rows for other sessions are skipped.
   const segs = rows
@@ -445,6 +463,24 @@ function drawOverlay() {
   g.clearRect(0, 0, w, h);
   if (!duration) return;
   const r = videoRect(), t = video.currentTime, half = 0.5 / fps();
+  if (tracks && $("show-tracks").checked) {
+    // Trails over the last 2 s, then a ring at the current position.
+    const k = Math.round(t / tracks.dt), back = Math.round(2 / tracks.dt), trail = new Map();
+    for (let j = Math.max(0, k - back); j <= k; j++) for (const [id, kind, x, y] of tracks.buckets[j] || []) {
+      if (!trail.has(id)) trail.set(id, { kind, pts: [] });
+      trail.get(id).pts.push([r.x + x * r.w, r.y + y * r.h, j]);
+    }
+    g.lineWidth = 2;
+    for (const [id, { kind, pts }] of trail) {
+      g.strokeStyle = css(`--${kind}`) || "#fff"; g.globalAlpha = 0.6;
+      g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+      const [x, y, j] = pts[pts.length - 1];
+      if (j !== k) continue;
+      g.globalAlpha = 1; g.beginPath(); g.arc(x, y, kind === "sheep" ? 6 : 9, 0, Math.PI * 2); g.stroke();
+      if ($("show-ids").checked) { g.fillStyle = "#fff"; g.font = `500 10px ${css("--f-mono")}`; g.fillText(id, x + 8, y - 8); }
+    }
+    g.globalAlpha = 1;
+  }
   for (const p of S.points) {
     const dt = Math.abs(p.t - t);
     if (dt > 2) continue;
@@ -505,7 +541,9 @@ video.addEventListener("loadedmetadata", () => {
   $("drop").hidden = true;
   for (const id of ["play", "back", "fwd", "export-csv", "export-points"]) $(id).disabled = false;
   changed();
+  tracks = null; $("tracks-row").hidden = true;
   toast(resumed ? `Resumed saved labels for ${videoName}` : `Opened ${videoName}`);
+  flushCSV();
 });
 video.addEventListener("error", () => toast("This browser cannot play that file; try MP4 (H.264) or WebM"));
 video.addEventListener("play", () => requestAnimationFrame(frame));
@@ -610,14 +648,20 @@ setPointKind(null);
 $("open-video").onclick = () => $("video-file").click();
 $("video-file").onchange = (e) => openVideo(e.target.files[0]);
 $("import-csv").onclick = () => $("csv-file").click();
-$("csv-file").onchange = async (e) => { const f = e.target.files[0]; if (f) importCSV(await f.text()); e.target.value = ""; };
+$("csv-file").onchange = (e) => {
+  pendingCSV.push(...e.target.files); e.target.value = "";
+  if (duration) flushCSV(); else toast("The CSV will load once a video is open");
+};
+// CSVs dropped together with a video wait until its duration is known.
+const pendingCSV = [];
+async function flushCSV() { while (duration && pendingCSV.length) importCSV(await pendingCSV.shift().text()); }
 $("export-csv").onclick = exportSegments;
 $("export-points").onclick = exportPoints;
 $("play").onclick = togglePlay;
 $("back").onclick = () => step(-1);
 $("fwd").onclick = () => step(1);
 $("rate").onchange = () => { video.playbackRate = +$("rate").value; };
-for (const id of ["session", "offset", "fps", "annotator"]) $(id).addEventListener("change", changed);
+for (const id of ["session", "offset", "fps", "annotator", "show-tracks", "show-ids"]) $(id).addEventListener("change", changed);
 
 $("seg-label").onchange = () => { if (selected < 0) return; snapshot(); S.pieces[selected].label = $("seg-label").value || null; changed(); };
 $("seg-notes").oninput = () => { if (selected >= 0) { S.pieces[selected].notes = $("seg-notes").value; drawTimeline(); save(); } };
@@ -633,9 +677,10 @@ screen.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.
 screen.addEventListener("dragleave", () => drop.classList.remove("over"));
 screen.addEventListener("drop", (e) => {
   e.preventDefault(); drop.classList.remove("over");
-  const f = e.dataTransfer.files[0];
-  if (!f) return;
-  if (/\.csv$/i.test(f.name)) f.text().then(importCSV); else openVideo(f);
+  for (const f of [...e.dataTransfer.files].sort((a, b) => /\.csv$/i.test(a.name) - /\.csv$/i.test(b.name))) {
+    if (/\.csv$/i.test(f.name)) pendingCSV.push(f); else openVideo(f);
+  }
+  flushCSV();
 });
 
 document.addEventListener("keydown", (e) => {
