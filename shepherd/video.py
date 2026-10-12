@@ -25,6 +25,14 @@ from . import data, phases as PH
 
 COCO = {"sheep": 18, "dog": 16, "shepherd": 0}  # shepherd = COCO "person"
 KINDS = tuple(COCO)
+# Model class names that map onto each kind; other classes are ignored. Matching by name lets
+# single-class sheep detectors (e.g. ones trained on drone footage) drop in for the COCO model.
+NAMES = {"sheep": "sheep", "ewe": "sheep", "lamb": "sheep", "dog": "dog", "person": "shepherd", "human": "shepherd"}
+
+
+def class_kinds(names):
+    """{class id: kind} for a model's names dict."""
+    return {int(i): NAMES[n.lower()] for i, n in names.items() if n.lower() in NAMES}
 SHEEP_LENGTH_M = 1.2
 DET_FIELDS = ("frame", "track", "kind", "x", "y", "w", "h", "conf")
 
@@ -89,11 +97,14 @@ def detect(video, model="yolo11n.pt", conf=0.25, imgsz=1280, stride=1, tracker="
     n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
-    kind_of = {v: k for k, v in COCO.items()}
+    yolo = YOLO(model)
+    kind_of = class_kinds(yolo.names)
+    if not kind_of:
+        raise ValueError(f"{model} has none of the classes {sorted(set(NAMES))}: {yolo.names}")
     rows = []
-    results = YOLO(model).track(
+    results = yolo.track(
         source=str(video), stream=True, persist=True, conf=conf, imgsz=imgsz, vid_stride=stride,
-        classes=list(COCO.values()), tracker=tracker, device=device, verbose=False,
+        classes=list(kind_of), tracker=tracker, device=device, verbose=False,
     )
     for k, r in enumerate(results):
         f = k * stride
