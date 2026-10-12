@@ -30,7 +30,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("video", nargs="?", help="video file")
     ap.add_argument("--from-detections", help="skip detection and clean this _detections.csv")
-    ap.add_argument("--model", default="yolo11n.pt", help="YOLO weights (COCO-pretrained by default; a fine-tuned model must keep the sheep/dog/person class ids)")
+    ap.add_argument("--model", default="yolo11n.pt", help="YOLO weights; classes are matched by name (sheep, dog, person/human), so sheep-only drone models work")
     ap.add_argument("--conf", type=float, default=0.25, help="detection confidence threshold")
     ap.add_argument("--imgsz", type=int, default=1280, help="inference size; larger finds smaller sheep but runs slower")
     ap.add_argument("--stride", type=int, default=1, help="run the detector on every Nth frame")

@@ -79,7 +79,7 @@ Units matter: the phase thresholds are in metres and m/s. For oblique footage, p
 `--px-per-m`. With neither, the scale is guessed from the median sheep box, assuming a 1.2 m
 sheep, which is only reasonable for top-down video. `--session` and `--offset` put the times on
 the UWB clock (tracking time = video time + offset). `--stride 2` halves the detector's work.
-`--model` takes fine-tuned weights, as long as they keep the COCO class ids.
+`--model` takes other YOLO weights. Classes are matched by name (`sheep`, `dog`, `person`/`human`), so a sheep-only drone model works too.
 
 `tests/test_video.py` checks the cleaning and labelling without the model. It renders a real
 session as noisy top-down detections (missed frames, ID switches, false positives) and gets the

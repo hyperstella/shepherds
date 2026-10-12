@@ -94,3 +94,10 @@ def test_csv_round_trip(session, tmp_path):
     V.write_phases(segs, tmp_path / "p.csv", session=session.number, offset=0.0, video="x.mp4")
     lab = PH.read_reviewed(tmp_path / "p.csv", session)
     assert (lab[: round(segs[-1].end_s / data.DT)] >= 0).all()
+
+
+def test_class_kinds_by_name():
+    coco = {0: "person", 16: "dog", 18: "sheep", 19: "cow"}
+    assert V.class_kinds(coco) == {0: "shepherd", 16: "dog", 18: "sheep"}
+    assert V.class_kinds({0: "Sheep"}) == {0: "sheep"}  # single-class drone sheep model
+    assert V.class_kinds({0: "sheep", 1: "goat", 2: "human", 3: "horse"}) == {0: "sheep", 2: "shepherd"}
