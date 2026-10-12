@@ -6,8 +6,9 @@ practical route is a few hundred hand-checked frames and a short fine-tune from 
     # 1. sample frames and pre-draw sheep boxes with the base model
     .venv/bin/python experiments/finetune_detector.py prelabel drive1.mp4 drive2.mp4 --out data/finetune
 
-    # 2. open data/finetune in CVAT ("Ultralytics YOLO Detection") or Label Studio (YOLO), fix the
-    #    sheep boxes, add every dog (class 1) and person (class 2), export back over labels/
+    # 2. fix the sheep boxes and add every dog and person, saving as you go
+    .venv/bin/python experiments/box_labeler.py data/finetune
+    #    (or use CVAT "Ultralytics YOLO Detection" / Label Studio YOLO and export over labels/)
 
     # 3. train, holding out whole videos for validation
     .venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60
@@ -23,13 +24,14 @@ across videos, light and altitude rather than taking many from one drive.
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from shepherd import finetune as FT, video as V, weights  # noqa: E402
+from shepherd import box_labeler as BL, finetune as FT, video as V, weights  # noqa: E402
 
 
 def prelabel(a):
@@ -44,7 +46,7 @@ def prelabel(a):
     (out / "images").mkdir(parents=True, exist_ok=True)
     (out / "labels").mkdir(parents=True, exist_ok=True)
     (out / "classes.txt").write_text("\n".join(FT.CLASSES) + "\n")
-    total = 0
+    total, confidences = 0, {}
     for video in a.videos:
         cap = cv2.VideoCapture(str(video))
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -59,27 +61,41 @@ def prelabel(a):
             name = FT.frame_name(Path(video).stem, f)
             cv2.imwrite(str(out / "images" / f"{name}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
             r = model.predict(img, conf=a.conf or conf or 0.25, imgsz=a.imgsz or imgsz or 1280, verbose=False)[0]
-            boxes = [(to_class[int(c)], *xywh) for xywh, c in zip(r.boxes.xywh.cpu().numpy(), r.boxes.cls.cpu().numpy())
-                     if int(c) in to_class]
+            keep = [(to_class[int(c)], *xywh, float(p)) for xywh, c, p in
+                    zip(r.boxes.xywh.cpu().numpy(), r.boxes.cls.cpu().numpy(), r.boxes.conf.cpu().numpy()) if int(c) in to_class]
+            boxes = [k[:5] for k in keep]
+            confidences[name] = [round(k[5], 3) for k in keep]
             (out / "labels" / f"{name}.txt").write_text("".join(l + "\n" for l in FT.label_lines(boxes, img.shape[1], img.shape[0])))
             total += 1
         cap.release()
         print(f"{video}: {len(frames)} frames every {step} frames")
+    # Lets the box labeler dash the boxes the model was unsure of.
+    old = BL._read_json(out / "prelabel.json")
+    (out / "prelabel.json").write_text(json.dumps(old | confidences))
     print(f"wrote {total} frames to {out}; pre-drawn boxes: {FT.class_counts(out / 'labels')}")
-    print("next: review in CVAT or Label Studio, add dogs (1) and people (2), then run `train`")
+    print(f"next: experiments/box_labeler.py {out}  (fix boxes, add dogs and people), then run `train`")
 
 
 def _split(a):
     images = sorted((Path(a.dataset) / "images").glob("*.jpg"))
     if not images:
         sys.exit(f"no images in {a.dataset}/images")
+    # Unchecked pre-labels teach the model its own mistakes (e.g. the dog boxed as a sheep),
+    # so once the box labeler has been used only accepted frames are trained and scored on.
+    reviewed = BL.reviewed_names(a.dataset)
+    if reviewed is not None and not a.include_unreviewed:
+        skipped = len(images)
+        images = [p for p in images if p.stem in reviewed]
+        print(f"using {len(images)} reviewed frames, skipping {skipped - len(images)} unreviewed (--include-unreviewed to keep them)")
+        if not images:
+            sys.exit("no reviewed frames yet: accept some in experiments/box_labeler.py")
     train, val = FT.split_by_video(images, a.val_frac, a.seed)
     if not val:
         sys.exit("need at least two frames to hold some out for validation")
     yaml = FT.write_data_yaml(a.dataset, train, val)
     print(f"{len(train)} train / {len(val)} val frames "
           f"({len({FT.video_of(p) for p in train})} / {len({FT.video_of(p) for p in val})} videos); "
-          f"boxes {FT.class_counts(Path(a.dataset) / 'labels')}")
+          f"boxes {FT.class_counts(Path(a.dataset) / 'labels', {Path(p).stem for p in images})}")
     return yaml
 
 
@@ -87,7 +103,7 @@ def train(a):
     from ultralytics import YOLO
 
     yaml = _split(a)
-    counts = FT.class_counts(Path(a.dataset) / "labels")
+    counts = FT.class_counts(Path(a.dataset) / "labels", {Path(p).stem for p in yaml.parent.joinpath("train.txt").read_text().split()})
     if counts["dog"] == 0:
         print("warning: no dog boxes yet, so the model will not learn to find the dog")
     imgsz, _ = weights.defaults(a.base)
@@ -144,6 +160,7 @@ def main(argv=None):
         p.add_argument("--imgsz", type=int, default=None)
         p.add_argument("--device", default=None, help="e.g. cpu, 0 (GPU), mps")
         p.add_argument("--project", default=str(ROOT / "runs" / "finetune"))
+        p.add_argument("--include-unreviewed", action="store_true", help="also use frames not accepted in the box labeler")
         p.set_defaults(fn=fn)
         if name == "train":
             p.add_argument("--base", default="icaerus", help="starting weights (shortcut or .pt)")

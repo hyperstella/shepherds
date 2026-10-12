@@ -68,3 +68,12 @@ def test_resolve_downloads_and_verifies(tmp_path, monkeypatch):
         W.resolve("test-bad", tmp_path / "models")
     assert not (tmp_path / "models" / "test-bad.pt").exists()
     assert W.resolve("yolo11n.pt") == "yolo11n.pt" and W.defaults("yolo11n.pt") == (None, None)
+
+
+def test_split_two_frames_and_counts(tmp_path):
+    images = [f"{FT.frame_name('drive', f)}.jpg" for f in (0, 5)]
+    assert FT.split_by_video(images, 0.2) == (images[:1], images[1:])
+    (tmp_path / "a.txt").write_text("0 0.5 0.5 0.1 0.1\n1 0.2 0.2 0.1 0.1\n")
+    (tmp_path / "b.txt").write_text("0 0.5 0.5 0.1 0.1\n")
+    assert FT.class_counts(tmp_path) == {"sheep": 2, "dog": 1, "person": 0}
+    assert FT.class_counts(tmp_path, {"b"}) == {"sheep": 1, "dog": 0, "person": 0}
