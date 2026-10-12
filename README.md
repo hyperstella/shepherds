@@ -79,13 +79,65 @@ Units matter: the phase thresholds are in metres and m/s. For oblique footage, p
 `--px-per-m`. With neither, the scale is guessed from the median sheep box, assuming a 1.2 m
 sheep, which is only reasonable for top-down video. `--session` and `--offset` put the times on
 the UWB clock (tracking time = video time + offset). `--stride 2` halves the detector's work.
-`--model` takes other YOLO weights. Classes are matched by name (`sheep`, `dog`, `person`/`human`), so a sheep-only drone model works too.
+`--model` takes other YOLO weights or a shortcut (`icaerus`, `icaerus-n`; see below). Classes are
+matched by name (`sheep`, `dog`, `person`/`human`), so a sheep-only drone model works too.
 
 `tests/test_video.py` checks the cleaning and labelling without the model. It renders a real
 session as noisy top-down detections (missed frames, ID switches, false positives) and gets the
-same phase as the tracking-based labels on more than 99% of samples. How well the detector does
-depends on the footage. COCO models find sheep well from the ground and from low drones, but
-small, densely packed sheep in high aerial shots may need `--imgsz 1920` or a fine-tuned model.
+same phase as the tracking-based labels on more than 99% of samples, so in practice the detector
+is what limits the results.
+
+### Detector choice
+
+We measured detectors on `sheep_crossing.MP4` from
+[ICAERUS UC3](https://github.com/ICAERUS-EU/UC3_Livestock_Monitoring) (GPL-3.0). It is a 14 s,
+5 fps nadir drone clip of about 50 sheep, a white dog and a shepherd. Boxes were checked by eye on
+frames 0, 35 and 70:
+
+| Model | Sheep boxes on frames 0 / 35 / 70 (≈50 / 40 / 9 visible) | Dog |
+|---|---|---|
+| `yolo11n.pt` (COCO, the default) | 0 / 0 / 0 | never |
+| `yolo11x.pt` (COCO), `--conf 0.05` | 29 / 26 / 0 | never |
+| AUTH-Sheep `hbb_model.pt` | 0–11 / 0–3 / 0 | never |
+| `--model icaerus-n` (YOLO11n) | 41 / 21 / 3 | never |
+| **`--model icaerus`** (YOLOv8m v4) | **51 / 30 / 8**: about 94% recall on frame 0 and 80% on frame 35, with misses in the shadowed back of the flock | boxed as a sheep |
+
+COCO models were trained on side views and miss sheep seen from above. Use `--model icaerus` for
+drone footage. It downloads once into `models/`, pinned to a commit and a SHA-256, and runs at its
+training settings (640 px, conf 0.5). This clip probably overlaps ICAERUS's training data, so
+expect lower recall on your own footage.
+
+No available model finds the dog from above, so phases on drone video read `away` until you
+fine-tune.
+
+### Fine-tuning for the dog
+
+`experiments/finetune_detector.py` trains a sheep/dog/person model from your own footage in four
+steps:
+
+```bash
+.venv/bin/python experiments/finetune_detector.py prelabel drive*.mp4 --out data/finetune   # ICAERUS pre-draws sheep
+# fix boxes in CVAT ("Ultralytics YOLO Detection") or Label Studio (YOLO): add dogs (1) and people (2)
+.venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60           # starts from ICAERUS
+.venv/bin/python experiments/finetune_detector.py eval data/finetune --model runs/finetune/sheepdog/weights/best.pt
+.venv/bin/python experiments/label_video.py drive9.mp4 --model runs/finetune/sheepdog/weights/best.pt
+```
+
+- **Validation:** whole videos are held out, because frames from one drive are near-duplicates
+  and would overstate accuracy.
+- **Augmentation:** rotations and flips are on, since nadir footage has no "up".
+- **Comparing models:** `eval` scores any model on the held-out frames. Run it on `icaerus` and on
+  your model to see the gain. Scores mean nothing until a person has corrected the held-out
+  labels, because uncorrected pre-labels only measure the base model against itself.
+- **How much to label:** a few hundred frames with the dog in shot, spread across videos, light
+  and altitude.
+- **Checked pipeline:** on the ICAERUS clip we ran pre-labelling, five hand-drawn dog boxes, a
+  3-epoch CPU fine-tune, `eval`, and `label_video` with the result, which then produced dog and
+  shepherd tracks. That shows the mechanics work, not that the model is accurate.
+
+YOLO weights are pickles, and unpickling can run code. Every external `.pt` is therefore scanned
+before use, without being loaded, and refused if it imports anything beyond torch/ultralytics
+classes (`shepherd/weights.py`).
 
 ### Reviewing in the browser
 
@@ -122,7 +174,8 @@ lab = phases.read_reviewed("drive_phases.csv", data.load_sessions()[0])  # -1 = 
 | `shepherd/kernels.py` | learned interaction kernels: integral-form least squares, CV, synthetic data, forward simulation |
 | `shepherd/phases.py` | rule-based draft phase labels (drive, turn, flank, idle, away) for all tracked time |
 | `shepherd/video.py` | video → clean tracks: YOLO + ByteTrack detection, cleaning to metres at 10 Hz, flock series, phase labels |
-| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md), `label_video` (video → clean data) |
+| `shepherd/weights.py`, `shepherd/finetune.py` | pinned detector downloads with checksum and pickle checks; YOLO dataset helpers for fine-tuning |
+| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md), `label_video` (video → clean data), `finetune_detector` (sheep/dog/person detector) |
 | `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data); `labeler.html` (video labeler) |
 | `reproduce.py` | regenerates the paper's Figs 1b–6 and the summary numbers |
 | `data/upstream/` | the authors' data, `.mat` files (used to verify the port) and MATLAB model, from commit `2c02a88` |

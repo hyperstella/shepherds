@@ -7,3 +7,6 @@ results/tables/
 .DS_Store
 results/video/
 *.pt
+runs/
+data/finetune/
+models/
