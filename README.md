@@ -117,12 +117,29 @@ steps:
 
 ```bash
 .venv/bin/python experiments/finetune_detector.py prelabel drive*.mp4 --out data/finetune   # ICAERUS pre-draws sheep
-# fix boxes in CVAT ("Ultralytics YOLO Detection") or Label Studio (YOLO): add dogs (1) and people (2)
+.venv/bin/python experiments/box_labeler.py data/finetune                                   # fix boxes, add dogs and people
 .venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60           # starts from ICAERUS
 .venv/bin/python experiments/finetune_detector.py eval data/finetune --model runs/finetune/sheepdog/weights/best.pt
 .venv/bin/python experiments/label_video.py drive9.mp4 --model runs/finetune/sheepdog/weights/best.pt
 ```
 
+- **Box labeler** (`experiments/box_labeler.py`, which opens `viz/box_labeler.html`): the model's
+  boxes come pre-drawn, and the ones it was unsure of are dashed. Most frames need only a few
+  keys:
+  - Click the dog the model called a sheep and press **2**; **X** deletes a wrong box.
+  - Double-click a missed sheep to drop a sheep-sized box, or drag to draw any box (this works on
+    top of other boxes too).
+  - **Tab** jumps to the next unsure box, **P** pastes the previous frame's dog and person boxes
+    to drag into place, and **Enter** accepts the frame and opens the next one to review.
+  - The wheel zooms, and right-drag pans.
+
+  Every change is saved straight to `labels/`, and accepted frames are recorded in
+  `review.json`. The page shows progress toward about 200 reviewed frames with a dog. It runs on
+  localhost only. CVAT ("Ultralytics YOLO Detection") and Label Studio (YOLO) read and write the
+  same folder if you prefer them.
+- **Reviewed frames only:** once you've used the box labeler, `train` and `eval` use only
+  accepted frames, because unchecked pre-labels teach the model its own mistakes.
+  `--include-unreviewed` overrides this.
 - **Validation:** whole videos are held out, because frames from one drive are near-duplicates
   and would overstate accuracy.
 - **Augmentation:** rotations and flips are on, since nadir footage has no "up".
@@ -175,7 +192,8 @@ lab = phases.read_reviewed("drive_phases.csv", data.load_sessions()[0])  # -1 = 
 | `shepherd/phases.py` | rule-based draft phase labels (drive, turn, flank, idle, away) for all tracked time |
 | `shepherd/video.py` | video → clean tracks: YOLO + ByteTrack detection, cleaning to metres at 10 Hz, flock series, phase labels |
 | `shepherd/weights.py`, `shepherd/finetune.py` | pinned detector downloads with checksum and pickle checks; YOLO dataset helpers for fine-tuning |
-| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md), `label_video` (video → clean data), `finetune_detector` (sheep/dog/person detector) |
+| `shepherd/box_labeler.py` | local server for `viz/box_labeler.html`: reads and saves YOLO labels and the review state |
+| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md), `label_video` (video → clean data), `finetune_detector` (sheep/dog/person detector), `box_labeler` (fix detector boxes) |
 | `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data); `labeler.html` (video labeler) |
 | `reproduce.py` | regenerates the paper's Figs 1b–6 and the summary numbers |
 | `data/upstream/` | the authors' data, `.mat` files (used to verify the port) and MATLAB model, from commit `2c02a88` |

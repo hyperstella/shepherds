@@ -61,7 +61,7 @@ def split_by_video(images, val_frac=0.2, seed=0):
     images = sorted(map(str, images))
     videos = sorted({video_of(p) for p in images})
     if len(videos) == 1:
-        k = max(1, round(len(images) * (1 - val_frac))) if len(images) > 1 else len(images)
+        k = min(len(images) - 1, max(1, round(len(images) * (1 - val_frac)))) if len(images) > 1 else len(images)
         return images[:k], images[k:]
     rng = random.Random(seed)
     rng.shuffle(videos)
@@ -70,9 +70,12 @@ def split_by_video(images, val_frac=0.2, seed=0):
     return [p for p in images if video_of(p) not in val_videos], [p for p in images if video_of(p) in val_videos]
 
 
-def class_counts(label_dir):
+def class_counts(label_dir, names=None):
+    """Boxes per class over all label files, or only those whose stem is in names."""
     counts = {c: 0 for c in CLASSES}
     for f in Path(label_dir).glob("*.txt"):
+        if names is not None and f.stem not in names:
+            continue
         for c, *_ in read_labels(f):
             if 0 <= c < len(CLASSES):
                 counts[CLASSES[c]] += 1

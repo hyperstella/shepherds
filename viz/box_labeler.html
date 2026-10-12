@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Herding Box Labeler</title>
+<style>
+/* Served by experiments/box_labeler.py. Layout: frame strip on the left, image in the middle,
+   tools and progress on the right. Everything saves to the dataset folder as you go. */
+:root {
+  --bg: #eef1eb; --panel: #fafbf8; --ink: #17201a; --muted: #56625a; --line: #d3dbd0; --chip: #e4eadf;
+  --sheep: #2f9bff; --dog: #ff7a1a; --person: #c06bff; --ok: #1baf7a; --warn: #e3b400;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101511; --panel: #171e19; --ink: #e6ece5; --muted: #9aa79e; --line: #2a342d; --chip: #202a23;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101511; --panel: #171e19; --ink: #e6ece5; --muted: #9aa79e; --line: #2a342d; --chip: #202a23;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/1.45 var(--f-body); }
+.app { display: grid; grid-template-columns: 190px minmax(0, 1fr) 280px; height: 100vh; }
+.strip { border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
+.strip-head { position: sticky; top: 0; background: var(--panel); padding: 10px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; z-index: 1; }
+.strip-head select { width: 100%; }
+.frame { display: flex; align-items: center; gap: 6px; padding: 5px 10px; cursor: pointer; font: 400 12px/1.3 var(--f-mono); border-left: 3px solid transparent; }
+.frame:hover { background: var(--chip); }
+.frame[aria-current="true"] { background: var(--chip); border-left-color: var(--ink); }
+.frame .fno { font-weight: 500; min-width: 4.5ch; }
+.frame .name { color: var(--muted);
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--muted); flex: none; }
+.dot.done { background: var(--ok); border-color: var(--ok); }
+.tag { font-size: 10.5px; padding: 0 4px; border-radius: 3px; background: var(--dog); color: #fff; }
+.stage { position: relative; overflow: hidden; background: #0b0f0c; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.hud { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; }
+.pill { font: 500 12px/1 var(--f-mono); padding: 6px 9px; border-radius: 999px; background: rgb(250 251 248 / .92); color: #17201a; }
+.side { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; padding: 14px; display: grid; gap: 16px; align-content: start; }
+h1 { margin: 0; font: 700 17px/1.2 var(--f-body); }
+h3 { margin: 0 0 6px; font: 500 11px/1.3 var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.classes { display: grid; gap: 6px; }
+.classes button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 600 14px var(--f-body); cursor: pointer; text-align: left; }
+.classes button[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: -1px; }
+.classes .n { margin-left: auto; font: 500 12px var(--f-mono); color: var(--muted); }
+.classes kbd, .keys kbd { font: 500 11px var(--f-mono); color: var(--muted); }
+.sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.btn { font: 600 14px/1 var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); width: 100%; }
+.btn:disabled { opacity: .45; cursor: default; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+.progress { height: 8px; background: var(--chip); border-radius: 8px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--ok); width: 0; transition: width .2s; }
+.stat { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; font-size: 13px; }
+.stat b { font: 500 12.5px var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12.5px; color: var(--muted); }
+.keys dt { font: 500 11.5px var(--f-mono); color: var(--ink); white-space: nowrap; }
+.keys dd { margin: 0; }
+.save { font: 400 12px var(--f-mono); color: var(--muted); }
+.save.err { color: #d03b3b; }
+select { font: 400 13px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px; }
+:focus-visible { outline: 2px solid var(--sheep); outline-offset: 2px; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; color: #b9c4bb; text-align: center; padding: 20px; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 60vh auto; height: auto; }
+  .strip { max-height: 160px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .side { border-left: 0; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="strip" aria-label="Frames">
+    <div class="strip-head">
+      <label class="save" for="filter">Show</label>
+      <select id="filter">
+        <option value="todo">To review</option>
+        <option value="all">All frames</option>
+        <option value="dog">With a dog</option>
+        <option value="done">Reviewed</option>
+      </select>
+    </div>
+    <div id="frames"></div>
+  </nav>
+
+  <main class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="empty" id="empty">Loading…</div>
+    <div class="hud"><span class="pill" id="hud-frame"></span><span class="pill" id="hud-mode"></span></div>
+  </main>
+
+  <aside class="side">
+    <div>
+      <h1>Box labeler</h1>
+      <p class="save" id="save-state">—</p>
+    </div>
+    <div>
+      <h3>Class <span style="text-transform:none">(new boxes, or the selected box)</span></h3>
+      <div class="classes" id="classes"></div>
+    </div>
+    <button class="btn primary" id="accept">Accept frame &amp; next <kbd style="color:inherit;opacity:.7">Enter</kbd></button>
+    <div class="row">
+      <button class="btn" id="prev">◀ Prev</button>
+      <button class="btn" id="next">Next ▶</button>
+      <button class="btn" id="paste" title="Copy dog and person boxes from the previous frame">Paste dog <kbd>P</kbd></button>
+    </div>
+    <div>
+      <h3>Progress</h3>
+      <div class="progress"><div id="bar"></div></div>
+      <div class="stat" style="margin-top:8px" id="stats"></div>
+    </div>
+    <details open>
+      <summary class="save" style="cursor:pointer">Keys</summary>
+      <dl class="keys" style="margin-top:8px">
+        <dt>Drag</dt><dd>draw a box (works on top of other boxes)</dd>
+        <dt>Double-click</dt><dd>drop a sheep-sized box</dd>
+        <dt>Click box</dt><dd>select (Shift: add); then drag to move, corners to resize</dd>
+        <dt>1 2 3</dt><dd>sheep / dog / person</dd>
+        <dt>X Del</dt><dd>delete selected</dd>
+        <dt>Tab</dt><dd>next unsure box</dd>
+        <dt>Enter</dt><dd>accept frame, next to review</dd>
+        <dt>← →  A D</dt><dd>previous / next frame</dd>
+        <dt>P</dt><dd>paste dog/person from previous frame</dd>
+        <dt>H (hold)</dt><dd>hide boxes</dd>
+        <dt>Wheel</dt><dd>zoom; right-drag or Space-drag pans; 0 resets</dd>
+        <dt>Ctrl+Z / Y</dt><dd>undo / redo</dd>
+      </dl>
+    </details>
+    <p class="save">Unsure boxes (model confidence under 0.6) are dashed. Box every sheep, dog and person at least half in view.</p>
+  </aside>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const cv = $("cv"), stage = $("stage");
+const COLORS = ["--sheep", "--dog", "--person"];
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const UNSURE = 0.6;
+
+let CLASSES = ["sheep", "dog", "person"], frames = [], idx = -1;
+let img = null, boxes = [], selected = new Set(), drawClass = 0, hide = false;
+let view = { s: 1, x: 0, y: 0 }, undo = [], redo = [];
+let saveTimer = null, dirty = false, typicalWH = [0.05, 0.08];
+
+// --- data ----------------------------------------------------------------
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+  return r.json();
+}
+async function loadList() {
+  const d = await api("/api/frames");
+  CLASSES = d.classes; frames = d.frames;
+  renderClasses(); renderList(); renderStats();
+  const first = frames.findIndex((f) => !f.reviewed);
+  if (frames.length) await open(first >= 0 ? first : 0);
+  else $("empty").textContent = "No frames in this dataset. Run finetune_detector.py prelabel first.";
+}
+async function open(i) {
+  if (i < 0 || i >= frames.length) return;
+  await flush();
+  idx = i;
+  const f = frames[i], d = await api(`/api/frame/${encodeURIComponent(f.name)}`);
+  const im = new Image();
+  im.src = `/img/${encodeURIComponent(f.name)}.jpg`;
+  await im.decode();
+  img = im;
+  boxes = d.labels.map(([c, cx, cy, w, h], k) => ({ c, x: (cx - w / 2) * img.width, y: (cy - h / 2) * img.height, w: w * img.width, h: h * img.height,
+    unsure: d.conf ? d.conf[k] < UNSURE : false }));
+  const sheep = boxes.filter((b) => b.c === 0);
+  if (sheep.length) typicalWH = [median(sheep.map((b) => b.w)), median(sheep.map((b) => b.h))].map((v, k) => v / (k ? img.height : img.width));
+  selected.clear(); undo = []; redo = [];
+  $("empty").hidden = true;
+  fit(); renderList(); renderStats(); draw();
+  document.querySelector(`.frame[data-i="${i}"]`)?.scrollIntoView({ block: "nearest" });
+}
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : 0; };
+function labelsOut() {
+  return boxes.filter((b) => b.w > 2 && b.h > 2).map((b) => [b.c, (b.x + b.w / 2) / img.width, (b.y + b.h / 2) / img.height, b.w / img.width, b.h / img.height]);
+}
+function changed() {
+  dirty = true; setSave("unsaved…");
+  clearTimeout(saveTimer); saveTimer = setTimeout(flush, 500);
+  updateCounts(); draw();
+}
+async function flush(reviewed) {
+  clearTimeout(saveTimer);
+  if (idx < 0 || (!dirty && reviewed === undefined)) return;
+  const f = frames[idx];
+  try {
+    const r = await api(`/api/frame/${encodeURIComponent(f.name)}`, { labels: labelsOut(), reviewed });
+    dirty = false; f.reviewed = r.reviewed; setSave(`saved ${new Date().toLocaleTimeString()}`);
+    boxes.forEach((b) => (b.unsure = b.unsure && !reviewed));
+  } catch (e) { setSave(`save failed: ${e.message}`, true); throw e; }
+  updateCounts(); renderList(); renderStats();
+}
+function setSave(t, err) { $("save-state").textContent = t; $("save-state").classList.toggle("err", !!err); }
+function updateCounts() {
+  if (idx < 0) return;
+  frames[idx].counts = CLASSES.map((_, c) => boxes.filter((b) => b.c === c).length);
+}
+
+// --- edits ---------------------------------------------------------------
+function snapshot() { undo.push(JSON.stringify(boxes)); if (undo.length > 100) undo.shift(); redo = []; }
+function restore(from, to) {
+  if (!from.length) return;
+  to.push(JSON.stringify(boxes)); boxes = JSON.parse(from.pop()); selected.clear(); changed();
+}
+function setClass(c) {
+  if (selected.size) { snapshot(); for (const k of selected) { boxes[k].c = c; boxes[k].unsure = false; } changed(); }
+  drawClass = c; renderClasses(); draw();
+}
+function deleteSelected() {
+  if (!selected.size) return;
+  snapshot(); boxes = boxes.filter((_, k) => !selected.has(k)); selected.clear(); changed();
+}
+async function accept() {
+  if (idx < 0) return;
+  await flush(true);
+  // Next frame still to review, after this one, wrapping around.
+  for (let k = 1; k <= frames.length; k++) {
+    const j = (idx + k) % frames.length;
+    if (!frames[j].reviewed) return open(j);
+  }
+  setSave("every frame reviewed 🎉");
+}
+async function pasteFromPrev() {
+  if (idx <= 0) return;
+  const prev = frames[idx - 1];
+  if (FT_video(prev.name) !== FT_video(frames[idx].name)) return setSave("previous frame is another video");
+  const d = await api(`/api/frame/${encodeURIComponent(prev.name)}`);
+  const add = d.labels.filter(([c]) => c !== 0);
+  if (!add.length) return setSave("no dog or person on the previous frame");
+  snapshot();
+  const start = boxes.length;
+  for (const [c, cx, cy, w, h] of add) boxes.push({ c, x: (cx - w / 2) * img.width, y: (cy - h / 2) * img.height, w: w * img.width, h: h * img.height });
+  selected = new Set(add.map((_, k) => start + k));
+  changed(); setSave(`pasted ${add.length}; drag to line up`);
+}
+const FT_video = (n) => n.includes("__f") ? n.slice(0, n.lastIndexOf("__f")) : n;
+const frameNo = (n) => n.includes("__f") ? "#" + (+n.slice(n.lastIndexOf("__f") + 3)) : "";
+
+// --- view ----------------------------------------------------------------
+function size() {
+  const r = stage.getBoundingClientRect(), d = devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  return [r.width, r.height];
+}
+function fit() {
+  const [w, h] = size();
+  if (!img) return;
+  view.s = Math.min(w / img.width, h / img.height);
+  view.x = (w - img.width * view.s) / 2; view.y = (h - img.height * view.s) / 2;
+}
+const toImg = (px, py) => [(px - view.x) / view.s, (py - view.y) / view.s];
+function draw() {
+  const d = devicePixelRatio || 1, g = cv.getContext("2d");
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+  if (!img) return;
+  g.setTransform(d * view.s, 0, 0, d * view.s, d * view.x, d * view.y);
+  g.imageSmoothingQuality = "high";
+  g.drawImage(img, 0, 0);
+  if (!hide) {
+    const lw = 1 / view.s;
+    boxes.forEach((b, k) => {
+      const col = css(COLORS[b.c] || "--sheep"), sel = selected.has(k);
+      g.lineWidth = (sel ? 3 : 1.8) * lw;
+      g.setLineDash(b.unsure && !sel ? [6 * lw, 4 * lw] : []);
+      g.strokeStyle = b.unsure && !sel ? css("--warn") : col;
+      g.strokeRect(b.x, b.y, b.w, b.h);
+      if (sel) {
+        g.fillStyle = col; g.globalAlpha = 0.15; g.fillRect(b.x, b.y, b.w, b.h); g.globalAlpha = 1;
+        for (const [hx, hy] of corners(b)) { g.fillStyle = "#fff"; g.fillRect(hx - 4 * lw, hy - 4 * lw, 8 * lw, 8 * lw); g.strokeRect(hx - 4 * lw, hy - 4 * lw, 8 * lw, 8 * lw); }
+      }
+      if (b.c !== 0) { // dogs and people are rare: label them so they stand out
+        g.setLineDash([]); g.font = `600 ${12 * lw}px ${css("--f-body")}`; g.fillStyle = col;
+        g.fillText(CLASSES[b.c], b.x, b.y - 4 * lw);
+      }
+    });
+    g.setLineDash([]);
+    if (drag && drag.mode === "draw") {
+      g.strokeStyle = css(COLORS[drawClass]); g.lineWidth = 2 * lw; g.setLineDash([4 * lw, 3 * lw]);
+      const [x, y, w, h] = rect(drag.a, drag.b); g.strokeRect(x, y, w, h); g.setLineDash([]);
+    }
+  }
+  const f = frames[idx];
+  $("hud-frame").textContent = f ? `${idx + 1}/${frames.length} · ${f.name}${f.reviewed ? " ✓" : ""}` : "";
+  $("hud-mode").textContent = `drawing: ${CLASSES[drawClass]}` + (selected.size ? ` · ${selected.size} selected` : "") + (hide ? " · boxes hidden" : "");
+}
+const corners = (b) => [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]];
+const rect = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])];
+function hit(p) {
+  // Smallest box under the point wins, so a sheep inside a loose box can still be picked.
+  let best = -1, area = Infinity;
+  boxes.forEach((b, k) => {
+    if (p[0] >= b.x && p[0] <= b.x + b.w && p[1] >= b.y && p[1] <= b.y + b.h && b.w * b.h < area) { best = k; area = b.w * b.h; }
+  });
+  return best;
+}
+function handleAt(p) {
+  const r = 7 / view.s;
+  for (const k of selected) {
+    const cs = corners(boxes[k]);
+    for (let j = 0; j < 4; j++) if (Math.abs(cs[j][0] - p[0]) < r && Math.abs(cs[j][1] - p[1]) < r) return [k, j];
+  }
+  return null;
+}
+
+// --- mouse ---------------------------------------------------------------
+let drag = null, spaceDown = false;
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+cv.addEventListener("pointerdown", (e) => {
+  if (!img) return;
+  cv.setPointerCapture(e.pointerId);
+  const r = cv.getBoundingClientRect(), sp = [e.clientX - r.left, e.clientY - r.top], p = toImg(...sp);
+  if (e.button === 2 || e.button === 1 || spaceDown) { drag = { mode: "pan", sp, v: { ...view } }; return; }
+  const h = handleAt(p);
+  if (h) { snapshot(); drag = { mode: "resize", k: h[0], corner: h[1], start: { ...boxes[h[0]] } }; return; }
+  // Dragging moves only a box that is already selected; anywhere else it draws, so new boxes
+  // can be drawn on top of a dense flock. A click without dragging selects the box under it.
+  const k = hit(p);
+  if (k >= 0 && selected.has(k) && !e.shiftKey) {
+    snapshot(); drag = { mode: "move", a: p, starts: [...selected].map((j) => [j, boxes[j].x, boxes[j].y]), moved: false };
+  } else {
+    drag = { mode: "draw", a: p, b: p, k, shift: e.shiftKey };
+  }
+  draw();
+});
+cv.addEventListener("pointermove", (e) => {
+  const r = cv.getBoundingClientRect(), sp = [e.clientX - r.left, e.clientY - r.top], p = toImg(...sp);
+  if (!drag) { const k = hit(p); cv.style.cursor = handleAt(p) ? "nwse-resize" : k >= 0 && selected.has(k) ? "move" : spaceDown ? "grab" : "crosshair"; return; }
+  if (drag.mode === "pan") { view.x = drag.v.x + sp[0] - drag.sp[0]; view.y = drag.v.y + sp[1] - drag.sp[1]; }
+  else if (drag.mode === "draw") drag.b = p;
+  else if (drag.mode === "move") {
+    drag.moved = true;
+    for (const [j, x, y] of drag.starts) { boxes[j].x = x + p[0] - drag.a[0]; boxes[j].y = y + p[1] - drag.a[1]; boxes[j].unsure = false; }
+  } else if (drag.mode === "resize") {
+    const s = drag.start, b = boxes[drag.k];
+    const x0 = drag.corner % 2 ? s.x : p[0], x1 = drag.corner % 2 ? p[0] : s.x + s.w;
+    const y0 = drag.corner < 2 ? p[1] : s.y, y1 = drag.corner < 2 ? s.y + s.h : p[1];
+    Object.assign(b, { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0), unsure: false });
+  }
+  draw();
+});
+cv.addEventListener("pointerup", () => {
+  if (!drag) return;
+  if (drag.mode === "draw") {
+    const [x, y, w, h] = rect(drag.a, drag.b);
+    if (w * view.s > 6 && h * view.s > 6) { snapshot(); boxes.push({ c: drawClass, x, y, w, h }); selected = new Set([boxes.length - 1]); changed(); }
+    else if (drag.k >= 0) { // a click on a box: select it (Shift toggles)
+      if (drag.shift) selected.has(drag.k) ? selected.delete(drag.k) : selected.add(drag.k);
+      else selected = new Set([drag.k]);
+      drawClass = boxes[drag.k].c; renderClasses();
+    } else if (!drag.shift) selected.clear();
+  } else if (drag.mode === "move") { if (drag.moved) changed(); else undo.pop(); }
+  else if (drag.mode === "resize") changed();
+  drag = null; draw();
+});
+cv.addEventListener("dblclick", (e) => {
+  if (!img) return;
+  const r = cv.getBoundingClientRect(), p = toImg(e.clientX - r.left, e.clientY - r.top);
+  if (hit(p) >= 0) return;
+  const w = typicalWH[0] * img.width, h = typicalWH[1] * img.height;
+  snapshot(); boxes.push({ c: drawClass, x: p[0] - w / 2, y: p[1] - h / 2, w, h }); selected = new Set([boxes.length - 1]); changed();
+});
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const k = Math.exp(-e.deltaY * 0.0015), s = Math.min(20, Math.max(0.05, view.s * k));
+  view.x = sx - (sx - view.x) * (s / view.s); view.y = sy - (sy - view.y) * (s / view.s); view.s = s;
+  draw();
+}, { passive: false });
+
+// --- keys ----------------------------------------------------------------
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); e.shiftKey ? restore(redo, undo) : restore(undo, redo); return; }
+  if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); restore(redo, undo); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^[1-9]$/.test(k) && +k <= CLASSES.length) setClass(+k - 1);
+  else if (k === "x" || k === "delete" || k === "backspace") { e.preventDefault(); deleteSelected(); }
+  else if (k === "enter") { e.preventDefault(); accept(); }
+  else if (k === "arrowright" || k === "d") open(idx + 1);
+  else if (k === "arrowleft" || k === "a") open(idx - 1);
+  else if (k === "p") pasteFromPrev();
+  else if (k === "h") { hide = true; draw(); }
+  else if (k === "0") { fit(); draw(); }
+  else if (k === "escape") { selected.clear(); draw(); }
+  else if (k === " ") { e.preventDefault(); spaceDown = true; cv.style.cursor = "grab"; }
+  else if (k === "tab") {
+    e.preventDefault();
+    const cur = selected.size ? Math.max(...selected) : -1;
+    const order = boxes.map((_, j) => (cur + 1 + j) % boxes.length);
+    const nxt = order.find((j) => boxes[j].unsure) ?? order[0];
+    if (nxt != null) { selected = new Set([nxt]); centerOn(boxes[nxt]); draw(); }
+  }
+});
+document.addEventListener("keyup", (e) => {
+  if (e.key.toLowerCase() === "h") { hide = false; draw(); }
+  if (e.key === " ") { spaceDown = false; cv.style.cursor = "crosshair"; }
+});
+function centerOn(b) {
+  const [w, h] = [cv.clientWidth, cv.clientHeight];
+  if (view.s < 1.5) view.s = Math.min(3, Math.max(view.s, 1.5));
+  view.x = w / 2 - (b.x + b.w / 2) * view.s; view.y = h / 2 - (b.y + b.h / 2) * view.s;
+}
+
+// --- panels --------------------------------------------------------------
+function renderClasses() {
+  const tot = CLASSES.map((_, c) => frames.reduce((s, f) => s + (f.reviewed ? f.counts[c] : 0), 0));
+  $("classes").innerHTML = CLASSES.map((n, c) =>
+    `<button data-c="${c}" aria-pressed="${c === drawClass}"><span class="sw" style="background:var(${COLORS[c]})"></span>${n} <kbd>${c + 1}</kbd><span class="n">${tot[c]} reviewed</span></button>`).join("");
+}
+$("classes").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setClass(+b.dataset.c); });
+function renderList() {
+  const f = $("filter").value;
+  const show = (fr) => f === "all" || (f === "todo" && !fr.reviewed) || (f === "done" && fr.reviewed) || (f === "dog" && fr.counts[1] > 0);
+  $("frames").innerHTML = frames.map((fr, i) => !show(fr) && i !== idx ? "" :
+    `<div class="frame" data-i="${i}" aria-current="${i === idx}"><span class="dot${fr.reviewed ? " done" : ""}"></span><span class="fno">${frameNo(fr.name)}</span><span class="name" title="${fr.name}">${FT_video(fr.name)}</span>${fr.counts[1] ? '<span class="tag">dog</span>' : ""}</div>`).join("");
+}
+$("frames").addEventListener("click", (e) => { const d = e.target.closest(".frame"); if (d) open(+d.dataset.i); });
+$("filter").onchange = renderList;
+function renderStats() {
+  const done = frames.filter((f) => f.reviewed), dogFrames = done.filter((f) => f.counts[1] > 0).length;
+  $("bar").style.width = `${frames.length ? (100 * done.length) / frames.length : 0}%`;
+  const videos = new Set(done.map((f) => FT_video(f.name))).size;
+  $("stats").innerHTML = `<span>Frames reviewed</span><b>${done.length} / ${frames.length}</b>`
+    + `<span>Reviewed frames with a dog</span><b>${dogFrames}</b>`
+    + `<span>Videos covered</span><b>${videos}</b>`
+    + `<span style="grid-column:1/-1;color:var(--muted)">${dogFrames >= 200 ? "Enough dog frames to train well." : `Aim for ~200 frames with a dog (${Math.max(0, 200 - dogFrames)} to go).`}</span>`;
+  renderClasses();
+}
+$("accept").onclick = accept;
+$("prev").onclick = () => open(idx - 1);
+$("next").onclick = () => open(idx + 1);
+$("paste").onclick = pasteFromPrev;
+addEventListener("resize", () => { fit(); draw(); });
+addEventListener("beforeunload", (e) => { if (dirty) { flush(); e.preventDefault(); } });
+loadList().catch((e) => { $("empty").textContent = `Could not load the dataset: ${e.message}`; });
+</script>
+</body>
+</html>
