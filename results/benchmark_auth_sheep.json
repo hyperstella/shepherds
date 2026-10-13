@@ -1,0 +1,42 @@
+{
+  "videos": [
+    2,
+    3,
+    4
+  ],
+  "every": 30,
+  "results": [
+    {
+      "model": "icaerus",
+      "imgsz": 640,
+      "conf": 0.5,
+      "frames": 138,
+      "flock_boxes": 3613,
+      "ap50": 0.35,
+      "precision": 0.606,
+      "recall": 0.399,
+      "recall_by_class": {
+        "goat": 0.114,
+        "sheep": 0.525
+      },
+      "boxes_on_people": 8,
+      "sec_per_frame": 0.53
+    },
+    {
+      "model": "icaerus",
+      "imgsz": 1280,
+      "conf": 0.5,
+      "frames": 138,
+      "flock_boxes": 3613,
+      "ap50": 0.364,
+      "precision": 0.616,
+      "recall": 0.479,
+      "recall_by_class": {
+        "goat": 0.043,
+        "sheep": 0.672
+      },
+      "boxes_on_people": 1,
+      "sec_per_frame": 1.75
+    }
+  ]
+}
