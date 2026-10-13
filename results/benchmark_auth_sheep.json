@@ -37,6 +37,54 @@
       },
       "boxes_on_people": 1,
       "sec_per_frame": 1.75
+    },
+    {
+      "model": "yolo11x.pt",
+      "imgsz": 1280,
+      "conf": 0.25,
+      "frames": 138,
+      "flock_boxes": 3613,
+      "ap50": 0.148,
+      "precision": 0.68,
+      "recall": 0.076,
+      "recall_by_class": {
+        "goat": 0.0,
+        "sheep": 0.11
+      },
+      "boxes_on_people": 0,
+      "sec_per_frame": 2.67
+    },
+    {
+      "model": "icaerus-n",
+      "imgsz": 1280,
+      "conf": 0.5,
+      "frames": 138,
+      "flock_boxes": 3613,
+      "ap50": 0.505,
+      "precision": 0.686,
+      "recall": 0.544,
+      "recall_by_class": {
+        "goat": 0.281,
+        "sheep": 0.661
+      },
+      "boxes_on_people": 2,
+      "sec_per_frame": 0.22
+    },
+    {
+      "model": "icaerus",
+      "imgsz": 1920,
+      "conf": 0.5,
+      "frames": 138,
+      "flock_boxes": 3613,
+      "ap50": 0.383,
+      "precision": 0.626,
+      "recall": 0.494,
+      "recall_by_class": {
+        "goat": 0.024,
+        "sheep": 0.703
+      },
+      "boxes_on_people": 0,
+      "sec_per_frame": 1.7
     }
   ]
 }

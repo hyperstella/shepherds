@@ -107,6 +107,24 @@ drone footage. It downloads once into `models/`, pinned to a commit and a SHA-25
 training settings (640 px, conf 0.5). This clip probably overlaps ICAERUS's training data, so
 expect lower recall on your own footage.
 
+**Benchmark against hand-drawn boxes.** `experiments/benchmark_auth_sheep.py` scores detectors on
+[AUTH-Sheep](https://zenodo.org/records/13843376) (CC BY 4.0), which is 4K drone video from a
+different farm with every sheep, goat and person boxed by hand. On videos 2–4 (138 frames, one per
+second, 3,613 sheep and goats), counting a box as a hit at IoU 0.5:
+
+| Model, input size | AP50 | Precision | Recall | Sheep recall | Goat recall | Boxes on people | s/frame (CPU) |
+|---|---|---|---|---|---|---|---|
+| `icaerus-n`, 1280 | **0.51** | 0.69 | **0.54** | 0.66 | **0.28** | 2 | 0.2 |
+| `icaerus`, 1920 | 0.38 | 0.63 | 0.49 | **0.70** | 0.02 | 0 | 1.7 |
+| `icaerus`, 1280 | 0.36 | 0.62 | 0.48 | 0.67 | 0.04 | 1 | 1.8 |
+| `icaerus`, 640 | 0.35 | 0.61 | 0.40 | 0.53 | 0.11 | 8 | 0.5 |
+| `yolo11x.pt` (COCO), 1280 | 0.15 | 0.68 | 0.08 | 0.11 | 0.00 | 0 | 2.7 |
+
+On footage it was not trained on, ICAERUS finds about half the flock, far below what it achieves on
+its own clips. Goats are mostly missed, so mixed flocks will be undercounted. The small
+`icaerus-n` at 1280 px scores best overall and runs fastest
+(`--model icaerus-n --imgsz 1280`).
+
 No available model finds the dog from above, so phases on drone video read `away` until you
 fine-tune.
 
