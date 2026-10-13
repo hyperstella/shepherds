@@ -143,6 +143,18 @@ steps:
 - **Validation:** whole videos are held out, because frames from one drive are near-duplicates
   and would overstate accuracy.
 - **Augmentation:** rotations and flips are on, since nadir footage has no "up".
+- **Frozen backbone (`--freeze 10`, the default):** only the detection head learns, so a small
+  dataset adds the dog class without eroding ICAERUS's sheep detection. On a 14 s test clip,
+  full fine-tuning on 36 frames cut held-out sheep recall from 97% to 78%; with the backbone
+  frozen it stayed at 94%. `--freeze 0` trains every layer, which is worth it once you have
+  thousands of labelled frames.
+- **No early stopping (`--patience 0`, the default):** the stopping score sums all classes, so
+  the many sheep boxes dominate it. With early stopping on, training stopped on epoch-1 weights
+  that had learned nothing about the dog. For the same reason, compare `last.pt` and `best.pt`
+  with `eval`.
+- **Dog data:** these settings protect sheep accuracy but do not make the dog appear. On that
+  test clip, 36 boxes of one dog over 7 s gave 0% held-out dog recall under every setting. The
+  dog needs varied examples: different dogs, light, poses and videos.
 - **Comparing models:** `eval` scores any model on the held-out frames. Run it on `icaerus` and on
   your model to see the gain. Scores mean nothing until a person has corrected the held-out
   labels, because uncorrected pre-labels only measure the base model against itself.

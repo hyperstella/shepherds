@@ -110,10 +110,13 @@ def train(a):
     model = YOLO(weights.resolve(a.base))
     model.train(data=str(yaml), epochs=a.epochs, imgsz=a.imgsz or imgsz or 640, batch=a.batch, device=a.device,
                 project=str(Path(a.project).resolve()), name=a.name, exist_ok=True, patience=a.patience, seed=a.seed,
+                freeze=a.freeze or None,  # frozen backbone: a small dataset cannot erode the base model's sheep features
                 fliplr=0.5, flipud=0.5, degrees=180.0)  # nadir footage has no up: rotate and flip freely
-    best = Path(a.project) / a.name / "weights" / "best.pt"
-    print(f"best weights: {best}")
-    print(f"next: experiments/finetune_detector.py eval {a.dataset} --model {best}")
+    # best.pt is picked by a score summed over classes, which the many sheep boxes dominate, so it can be
+    # an early epoch that has not learned the dog yet. last.pt is the end of training.
+    last = Path(a.project) / a.name / "weights" / "last.pt"
+    print(f"final weights: {last}  (best.pt beside it is chosen mostly on sheep; compare both with eval)")
+    print(f"next: experiments/finetune_detector.py eval {a.dataset} --model {last}")
 
 
 def evaluate(a):
@@ -166,7 +169,12 @@ def main(argv=None):
             p.add_argument("--base", default="icaerus", help="starting weights (shortcut or .pt)")
             p.add_argument("--epochs", type=int, default=60)
             p.add_argument("--batch", type=int, default=8)
-            p.add_argument("--patience", type=int, default=20)
+            p.add_argument("--patience", type=int, default=0,
+                           help="early-stop after N epochs without improvement; 0 (default) trains all epochs, "
+                                "since the stopping score is dominated by sheep and stops before the dog is learned")
+            p.add_argument("--freeze", type=int, default=10,
+                           help="freeze the first N layers (10 = the YOLOv8/11 backbone) so a small dataset keeps the "
+                                "base model's sheep detection; 0 trains every layer")
             p.add_argument("--name", default="sheepdog")
         else:
             p.add_argument("--model", required=True, help="weights to score (shortcut or .pt)")
