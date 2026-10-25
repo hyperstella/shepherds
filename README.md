@@ -50,8 +50,11 @@ matches the Python version's statistics.
 `experiments/label_video.py` turns a herding video into clean data with no manual labelling. It
 runs on your machine:
 
-1. **Detect and track.** A COCO-pretrained YOLO model (`yolo11n.pt`, downloaded once) finds
-   `sheep`, `dog` and `person` (taken as the shepherd), and ByteTrack links the boxes into tracks.
+1. **Detect and track.** A YOLO model finds sheep, and ByteTrack links the boxes into tracks. The
+   default, `icaerus-n`, is a drone-sheep detector downloaded once (see "Detector choice"). It
+   detects sheep only, so dogs and people need a fine-tuned model (see "Fine-tuning for the dog")
+   or a COCO model such as `--model yolo11x.pt` for ground-level video, which also finds `dog` and
+   `person` (taken as the shepherd).
 2. **Clean.** Tracks shorter than 1 s are dropped, and each track takes its majority class.
    Positions are converted to metres and resampled to 10 Hz like the UWB data. Gaps up to 1 s are
    interpolated and the tracks are smoothed over 0.5 s. Dog and shepherd fragments are stitched
@@ -79,7 +82,7 @@ Units matter: the phase thresholds are in metres and m/s. For oblique footage, p
 `--px-per-m`. With neither, the scale is guessed from the median sheep box, assuming a 1.2 m
 sheep, which is only reasonable for top-down video. `--session` and `--offset` put the times on
 the UWB clock (tracking time = video time + offset). `--stride 2` halves the detector's work.
-`--model` takes other YOLO weights or a shortcut (`icaerus`, `icaerus-n`; see below). Classes are
+`--model` takes other YOLO weights or a shortcut (`icaerus-n`, the default, or `icaerus`; see below). Classes are
 matched by name (`sheep`, `dog`, `person`/`human`), so a sheep-only drone model works too.
 
 `tests/test_video.py` checks the cleaning and labelling without the model. It renders a real
@@ -102,10 +105,10 @@ frames 0, 35 and 70:
 | `--model icaerus-n` (YOLO11n) | 41 / 21 / 3 | never |
 | **`--model icaerus`** (YOLOv8m v4) | **51 / 30 / 8**: about 94% recall on frame 0 and 80% on frame 35, with misses in the shadowed back of the flock | boxed as a sheep |
 
-COCO models were trained on side views and miss sheep seen from above. Use `--model icaerus` for
-drone footage. It downloads once into `models/`, pinned to a commit and a SHA-256, and runs at its
-training settings (640 px, conf 0.5). This clip probably overlaps ICAERUS's training data, so
-expect lower recall on your own footage.
+COCO models were trained on side views and miss sheep seen from above. On this clip the larger
+`icaerus` looked best, but the clip probably overlaps ICAERUS's training data. The independent
+benchmark below reverses the order, so the default is `icaerus-n` at 1280 px. Shortcut weights
+download once into `models/`, pinned to a commit and a SHA-256.
 
 **Benchmark against hand-drawn boxes.** `experiments/benchmark_auth_sheep.py` scores detectors on
 [AUTH-Sheep](https://zenodo.org/records/13843376) (CC BY 4.0), which is 4K drone video from a
@@ -122,8 +125,9 @@ second, 3,613 sheep and goats), counting a box as a hit at IoU 0.5:
 
 On footage it was not trained on, ICAERUS finds about half the flock, far below what it achieves on
 its own clips. Goats are mostly missed, so mixed flocks will be undercounted. The small
-`icaerus-n` at 1280 px scores best overall and runs fastest
-(`--model icaerus-n --imgsz 1280`).
+`icaerus-n` at 1280 px scores best overall and runs fastest, so it is the default for
+`label_video.py`, `prelabel` and `train`. `--model icaerus` (at 640 px unless `--imgsz` is
+given) remains available.
 
 No available model finds the dog from above, so phases on drone video read `away` until you
 fine-tune.
@@ -134,9 +138,9 @@ fine-tune.
 steps:
 
 ```bash
-.venv/bin/python experiments/finetune_detector.py prelabel drive*.mp4 --out data/finetune   # ICAERUS pre-draws sheep
+.venv/bin/python experiments/finetune_detector.py prelabel drive*.mp4 --out data/finetune   # icaerus-n pre-draws sheep
 .venv/bin/python experiments/box_labeler.py data/finetune                                   # fix boxes, add dogs and people
-.venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60           # starts from ICAERUS
+.venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60           # starts from icaerus-n
 .venv/bin/python experiments/finetune_detector.py eval data/finetune --model runs/finetune/sheepdog/weights/best.pt
 .venv/bin/python experiments/label_video.py drive9.mp4 --model runs/finetune/sheepdog/weights/best.pt
 ```
@@ -162,9 +166,9 @@ steps:
   and would overstate accuracy.
 - **Augmentation:** rotations and flips are on, since nadir footage has no "up".
 - **Frozen backbone (`--freeze 10`, the default):** only the detection head learns, so a small
-  dataset adds the dog class without eroding ICAERUS's sheep detection. On a 14 s test clip,
-  full fine-tuning on 36 frames cut held-out sheep recall from 97% to 78%; with the backbone
-  frozen it stayed at 94%. `--freeze 0` trains every layer, which is worth it once you have
+  dataset adds the dog class without eroding the base model's sheep detection. On a 14 s test clip
+  starting from `icaerus`, full fine-tuning on 36 frames cut held-out sheep recall from 97% to 78%;
+  with the backbone frozen it stayed at 94%. `--freeze 0` trains every layer, which is worth it once you have
   thousands of labelled frames.
 - **No early stopping (`--patience 0`, the default):** the stopping score sums all classes, so
   the many sheep boxes dominate it. With early stopping on, training stopped on epoch-1 weights
@@ -173,7 +177,7 @@ steps:
 - **Dog data:** these settings protect sheep accuracy but do not make the dog appear. On that
   test clip, 36 boxes of one dog over 7 s gave 0% held-out dog recall under every setting. The
   dog needs varied examples: different dogs, light, poses and videos.
-- **Comparing models:** `eval` scores any model on the held-out frames. Run it on `icaerus` and on
+- **Comparing models:** `eval` scores any model on the held-out frames. Run it on `icaerus-n` and on
   your model to see the gain. Scores mean nothing until a person has corrected the held-out
   labels, because uncorrected pre-labels only measure the base model against itself.
 - **How much to label:** a few hundred frames with the dog in shot, spread across videos, light

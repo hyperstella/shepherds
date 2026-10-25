@@ -1,6 +1,6 @@
 """Named detector weights: pinned downloads, checksum and pickle checks.
 
-    path = resolve("icaerus")   # downloads once into models/, verifies, returns the local path
+    path = resolve("icaerus-n")   # downloads once into models/, verifies, returns the local path
 
 YOLO .pt files are pickles, and unpickling can run code. Shortcut weights are
 pinned to a commit and a SHA-256, and every external file is scanned (without
@@ -22,9 +22,10 @@ _ICAERUS = "https://raw.githubusercontent.com/ICAERUS-EU/UC3_Livestock_Monitorin
 class Weights:
     url: str
     sha256: str
-    imgsz: int  # training resolution; inference works best at the same size
+    imgsz: int  # inference size, chosen on the AUTH-Sheep benchmark
     conf: float
     about: str
+    train_imgsz: int = 640  # resolution the weights were trained at, used when fine-tuning
 
 
 # ICAERUS UC3 Livestock Monitoring (Institut de l'Elevage, GPL-3.0): single-class "sheep"
@@ -34,8 +35,8 @@ SHORTCUTS = {
                        "a292c078c27641ccd88e89635059c56ab8b7bef0611326f374e585fed4894600", 640, 0.5,
                        "ICAERUS YOLOv8m sheep v4 (their gold standard)"),
     "icaerus-n": Weights(f"{_ICAERUS}/yolo11n_sheep/yolo11n_all.pt",
-                         "666fcf6d87c57ee87a5c001dac4ab35fc7f65be439ddd30a70714e9f4718e95a", 640, 0.5,
-                         "ICAERUS YOLO11n sheep (fast, lower recall)"),
+                         "666fcf6d87c57ee87a5c001dac4ab35fc7f65be439ddd30a70714e9f4718e95a", 1280, 0.5,
+                         "ICAERUS YOLO11n sheep (the default: best on AUTH-Sheep at 1280 px, and fastest)"),
 }
 
 # Globals a YOLO checkpoint legitimately needs. Anything else (os, subprocess, builtins.eval,
@@ -103,7 +104,16 @@ def resolve(model, models_dir=MODELS_DIR):
     return model
 
 
+DEFAULT = "icaerus-n"
+
+
 def defaults(model):
-    """(imgsz, conf) the model was meant for, or None for unknown models."""
+    """(inference imgsz, conf) for a shortcut, or (None, None) for unknown models."""
     w = SHORTCUTS.get(model)
     return (w.imgsz, w.conf) if w else (None, None)
+
+
+def train_imgsz(model):
+    """Resolution to fine-tune a shortcut at, or None for unknown models."""
+    w = SHORTCUTS.get(model)
+    return w.train_imgsz if w else None

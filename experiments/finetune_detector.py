@@ -1,7 +1,7 @@
 """Fine-tune a sheep/dog/person detector on your own herding footage.
 
 Off-the-shelf models miss the dog in top-down video (see README, "Detector choice"), so the
-practical route is a few hundred hand-checked frames and a short fine-tune from ICAERUS v4.
+practical route is a few hundred hand-checked frames and a short fine-tune from ICAERUS (icaerus-n).
 
     # 1. sample frames and pre-draw sheep boxes with the base model
     .venv/bin/python experiments/finetune_detector.py prelabel drive1.mp4 drive2.mp4 --out data/finetune
@@ -14,7 +14,7 @@ practical route is a few hundred hand-checked frames and a short fine-tune from 
     .venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60
 
     # 4. compare models on the held-out videos, then label with the winner
-    .venv/bin/python experiments/finetune_detector.py eval data/finetune --model icaerus
+    .venv/bin/python experiments/finetune_detector.py eval data/finetune --model icaerus-n
     .venv/bin/python experiments/finetune_detector.py eval data/finetune --model runs/finetune/sheepdog/weights/best.pt
     .venv/bin/python experiments/label_video.py drive3.mp4 --model runs/finetune/sheepdog/weights/best.pt
 
@@ -106,9 +106,8 @@ def train(a):
     counts = FT.class_counts(Path(a.dataset) / "labels", {Path(p).stem for p in yaml.parent.joinpath("train.txt").read_text().split()})
     if counts["dog"] == 0:
         print("warning: no dog boxes yet, so the model will not learn to find the dog")
-    imgsz, _ = weights.defaults(a.base)
     model = YOLO(weights.resolve(a.base))
-    model.train(data=str(yaml), epochs=a.epochs, imgsz=a.imgsz or imgsz or 640, batch=a.batch, device=a.device,
+    model.train(data=str(yaml), epochs=a.epochs, imgsz=a.imgsz or weights.train_imgsz(a.base) or 640, batch=a.batch, device=a.device,
                 project=str(Path(a.project).resolve()), name=a.name, exist_ok=True, patience=a.patience, seed=a.seed,
                 freeze=a.freeze or None,  # frozen backbone: a small dataset cannot erode the base model's sheep features
                 fliplr=0.5, flipud=0.5, degrees=180.0)  # nadir footage has no up: rotate and flip freely
@@ -149,7 +148,7 @@ def main(argv=None):
     p = sub.add_parser("prelabel", help="sample frames and pre-draw boxes with a base model")
     p.add_argument("videos", nargs="+")
     p.add_argument("--out", default=str(ROOT / "data" / "finetune"))
-    p.add_argument("--base", default="icaerus", help="model that pre-draws boxes (shortcut or .pt)")
+    p.add_argument("--base", default="icaerus-n", help="model that pre-draws boxes (shortcut or .pt)")
     p.add_argument("--every-s", type=float, default=2.0, help="seconds between sampled frames")
     p.add_argument("--max-frames", type=int, default=150, help="per video")
     p.add_argument("--conf", type=float, default=None)
@@ -166,7 +165,7 @@ def main(argv=None):
         p.add_argument("--include-unreviewed", action="store_true", help="also use frames not accepted in the box labeler")
         p.set_defaults(fn=fn)
         if name == "train":
-            p.add_argument("--base", default="icaerus", help="starting weights (shortcut or .pt)")
+            p.add_argument("--base", default="icaerus-n", help="starting weights (shortcut or .pt)")
             p.add_argument("--epochs", type=int, default=60)
             p.add_argument("--batch", type=int, default=8)
             p.add_argument("--patience", type=int, default=0,

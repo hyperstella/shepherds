@@ -86,11 +86,11 @@ class Flock:
 # --- detection -------------------------------------------------------------
 
 
-def detect(video, model="yolo11n.pt", conf=None, imgsz=None, stride=1, tracker="bytetrack.yaml", device=None, progress=False):
+def detect(video, model="icaerus-n", conf=None, imgsz=None, stride=1, tracker="bytetrack.yaml", device=None, progress=False):
     """Run a YOLO detector with ByteTrack over a video file. Needs `ultralytics`.
 
     model is a .pt path, an ultralytics name, or a shortcut from weights.SHORTCUTS
-    ("icaerus"); conf and imgsz default to what the shortcut was trained for.
+    ("icaerus-n", the default); conf and imgsz default to the shortcut's settings.
     """
     import cv2
     from ultralytics import YOLO

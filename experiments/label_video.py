@@ -2,7 +2,6 @@
 
     .venv/bin/pip install -r requirements-video.txt      # once: ultralytics (YOLO + ByteTrack)
     .venv/bin/python experiments/label_video.py drive.mp4
-    .venv/bin/python experiments/label_video.py drone.mp4 --model icaerus   # drone-trained sheep detector
     .venv/bin/python experiments/label_video.py drive.mp4 --px-per-m 18.5 --session 3 --offset 412.0
     .venv/bin/python experiments/label_video.py --from-detections results/video/drive_detections.csv
 
@@ -31,11 +30,12 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("video", nargs="?", help="video file")
     ap.add_argument("--from-detections", help="skip detection and clean this _detections.csv")
-    ap.add_argument("--model", default="yolo11n.pt",
-                    help="YOLO weights (.pt), or a shortcut: icaerus (drone sheep, recommended for top-down video), icaerus-n. "
+    ap.add_argument("--model", default="icaerus-n",
+                    help="YOLO weights (.pt), an ultralytics name (yolo11x.pt for ground-level video), or a shortcut: "
+                         "icaerus-n (default; drone sheep, best on AUTH-Sheep), icaerus (larger, best on ICAERUS's own clips). "
                          "Classes are matched by name (sheep, dog, person/human)")
     ap.add_argument("--conf", type=float, default=None, help="detection confidence threshold (default: the shortcut's, else 0.25)")
-    ap.add_argument("--imgsz", type=int, default=None, help="inference size (default: the shortcut's training size, else 1280)")
+    ap.add_argument("--imgsz", type=int, default=None, help="inference size (default: the shortcut's, 1280 for icaerus-n; else 1280)")
     ap.add_argument("--stride", type=int, default=1, help="run the detector on every Nth frame")
     ap.add_argument("--device", default=None, help="e.g. cpu, 0 (GPU), mps")
     ap.add_argument("--px-per-m", type=float, default=None)
