@@ -1,0 +1,193 @@
+{
+  "Real collie": {
+    "minutes": 76.25833333333334,
+    "shares": {
+      "drive": 0.47339088624194076,
+      "turn": 0.08820893891377991,
+      "flank": 0.03127527046224456,
+      "idle": 0.2691946235384111,
+      "away": 0.13793028084362366
+    },
+    "moving_shares": {
+      "drive": 0.7984664725181553,
+      "turn": 0.1487816566520441,
+      "flank": 0.05275187082980057
+    },
+    "by_label": {
+      "drive": {
+        "segments_per_10min": 11.801988853677193,
+        "median_duration_s": 19.900000000000006,
+        "flock_speed": 0.9165437631203615,
+        "dog_dist": 5.271371800320361,
+        "psi_bd": 158.297934780503,
+        "cohesion": 1.2169449776604992
+      },
+      "turn": {
+        "segments_per_10min": 5.376461588897388,
+        "median_duration_s": 9.099999999999994,
+        "flock_speed": 0.9637579261980342,
+        "dog_dist": 4.632777007133125,
+        "psi_bd": 147.65312793031404,
+        "cohesion": 1.5260290674938077
+      },
+      "flank": {
+        "segments_per_10min": 2.2292645612501363,
+        "median_duration_s": 7.600000000000023,
+        "flock_speed": 0.9286068395330914,
+        "dog_dist": 5.197421687315623,
+        "psi_bd": 84.60455452245844,
+        "cohesion": 1.5540728413431417
+      },
+      "idle": {
+        "segments_per_10min": 7.867992569118129,
+        "median_duration_s": 12.50000000000001,
+        "flock_speed": 0.09507000978421723,
+        "dog_dist": 6.177255160406682,
+        "psi_bd": 120.8499123783911,
+        "cohesion": 1.227700973197635
+      },
+      "away": {
+        "segments_per_10min": 2.098131351764834,
+        "median_duration_s": 17.700000000000017,
+        "flock_speed": 0.06562678533460137,
+        "dog_dist": 20.528765380655887,
+        "psi_bd": 118.1925620071695,
+        "cohesion": 1.4118545460981882
+      }
+    },
+    "heading_change_moving": {
+      "p50": 51.3,
+      "p90": 164.2,
+      "p99": 279.4
+    },
+    "trips_per_10min": null
+  },
+  "Published": {
+    "minutes": 160.26666666666668,
+    "shares": {
+      "drive": 1.0,
+      "turn": 0.0,
+      "flank": 0.0,
+      "idle": 0.0,
+      "away": 0.0
+    },
+    "moving_shares": {
+      "drive": 1.0,
+      "turn": 0.0,
+      "flank": 0.0
+    },
+    "by_label": {
+      "drive": {
+        "segments_per_10min": 0.9983361064891847,
+        "median_duration_s": 601.0,
+        "flock_speed": 0.8381850570841036,
+        "dog_dist": 7.839304578662115,
+        "psi_bd": 171.35709130959992,
+        "cohesion": 2.7726586969897027
+      },
+      "turn": {
+        "segments_per_10min": 0.0,
+        "median_duration_s": null,
+        "flock_speed": null,
+        "dog_dist": null,
+        "psi_bd": null,
+        "cohesion": null
+      },
+      "flank": {
+        "segments_per_10min": 0.0,
+        "median_duration_s": null,
+        "flock_speed": null,
+        "dog_dist": null,
+        "psi_bd": null,
+        "cohesion": null
+      },
+      "idle": {
+        "segments_per_10min": 0.0,
+        "median_duration_s": null,
+        "flock_speed": null,
+        "dog_dist": null,
+        "psi_bd": null,
+        "cohesion": null
+      },
+      "away": {
+        "segments_per_10min": 0.0,
+        "median_duration_s": null,
+        "flock_speed": null,
+        "dog_dist": null,
+        "psi_bd": null,
+        "cohesion": null
+      }
+    },
+    "heading_change_moving": {
+      "p50": 12.9,
+      "p90": 51.8,
+      "p99": 87.6
+    },
+    "runs_with_away": 0,
+    "trips_per_10min": 4.6875
+  },
+  "Calibrated (M4\u03c4)": {
+    "minutes": 160.05333333333334,
+    "shares": {
+      "drive": 0.3283905364878374,
+      "turn": 0.08330556481172942,
+      "flank": 0.06214595134955015,
+      "idle": 0.08774158613795402,
+      "away": 0.43841636121292904
+    },
+    "moving_shares": {
+      "drive": 0.6930379746835443,
+      "turn": 0.17580872011251758,
+      "flank": 0.13115330520393811
+    },
+    "by_label": {
+      "drive": {
+        "segments_per_10min": 4.873375541486171,
+        "median_duration_s": 28.299999999999997,
+        "flock_speed": 1.0257149296502233,
+        "dog_dist": 6.137248031493147,
+        "psi_bd": 164.71261593825722,
+        "cohesion": 1.1762604721715169
+      },
+      "turn": {
+        "segments_per_10min": 4.06114628457181,
+        "median_duration_s": 9.799999999999997,
+        "flock_speed": 0.9066902289782108,
+        "dog_dist": 6.034664191107516,
+        "psi_bd": 160.78590580057855,
+        "cohesion": 1.1384053111050045
+      },
+      "flank": {
+        "segments_per_10min": 2.6866044651782737,
+        "median_duration_s": 10.199999999999989,
+        "flock_speed": 0.667974448038664,
+        "dog_dist": 4.822350150433735,
+        "psi_bd": 95.06265187585417,
+        "cohesion": 3.3771773054274696
+      },
+      "idle": {
+        "segments_per_10min": 4.248583805398201,
+        "median_duration_s": 9.900000000000006,
+        "flock_speed": 0.10389092953542527,
+        "dog_dist": 9.180671342443294,
+        "psi_bd": 114.9987620078243,
+        "cohesion": 3.2249524961908342
+      },
+      "away": {
+        "segments_per_10min": 3.936187937354215,
+        "median_duration_s": 13.800000000000011,
+        "flock_speed": 0.013783074633995536,
+        "dog_dist": 17.72117794120012,
+        "psi_bd": 122.093847685308,
+        "cohesion": 4.660325589715766
+      }
+    },
+    "heading_change_moving": {
+      "p50": 56.2,
+      "p90": 158.8,
+      "p99": 261.2
+    },
+    "runs_with_away": 15,
+    "trips_per_10min": 1.75
+  }
+}

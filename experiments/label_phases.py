@@ -75,7 +75,7 @@ def main():
 
     fig, axes = plt.subplots(len(sessions), 1, figsize=(11, 1.0 * len(sessions) + 1), sharex=True)
     for ax, s in zip(axes, sessions):
-        for g in (g for g in segs if g.session == s.number):
+        for g in (g for g in segs if g.track == s.number):
             ax.axvspan(g.start_s / 60, g.end_s / 60, 0.0, 0.62, color=COLORS[g.label], lw=0)
         for a, b in data.DRIVES.get(s.number, []):
             ax.axvspan(a / 60, b / 60, 0.72, 1.0, color="#222222", lw=0)

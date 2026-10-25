@@ -64,3 +64,21 @@ def test_dog_replay_and_init():
     # and move at most v * dt per step
     step = np.linalg.norm(np.diff(r.pos_s, axis=-1), axis=2)
     assert step.max() <= 0.5 + 1e-9
+
+
+def test_pair_kernel_pulls_straggler_back():
+    from dataclasses import replace
+
+    from shepherd.kernels import PAIR_KNOTS
+
+    # attraction that grows with distance, repulsion below 1 m
+    coef = tuple(np.interp(PAIR_KNOTS[:-1], [0.0, 1.0, 6.0], [-0.05, 0.0, 0.06]))
+    pos_s = np.array([[[0.0, 0.0], [0.5, 0.0], [0.0, 0.5], [0.5, 0.5], [6.0, 0.0]]])
+    init = {"pos_s": pos_s, "vel_s": np.tile([0.0, 1.0], (1, 5, 1)), "pos_d": np.array([[0.0, -3.0]]),
+            "vel_d": np.array([[0.0, 1.0]])}
+    base = Params(n_sheep=5, k_perceive=4, n_att=2, n_steps=20, dt=0.2, noise=0.0, w_att=0.0, w_ali=0.0, w_dog=0.0, w_rep=0.0,
+                  r_dog=50.0, v_dog=0.0, box_length=0.0)
+    off = simulate(base, 1, seed=0, init=init)
+    on = simulate(replace(base, pair_kernel=(PAIR_KNOTS, coef), g_pairk=1.0), 1, seed=0, init=init)
+    gap = lambda r: np.linalg.norm(r.pos_s[0, 4, :, -1] - r.pos_s[0, :4, :, -1].mean(0))
+    assert gap(on) < gap(off) - 0.5

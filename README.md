@@ -189,12 +189,12 @@ lab = phases.read_reviewed("drive_phases.csv", data.load_sessions()[0])  # -1 = 
 | `shepherd/scenario.py` | simulated drives matched to real ones: the real dog replayed in 15 s windows that restart from the real flock |
 | `shepherd/abc.py` | NumPy ABC: Sobol reference tables, regression adjustment, coverage checks |
 | `shepherd/kernels.py` | learned interaction kernels: integral-form least squares, CV, synthetic data, forward simulation |
-| `shepherd/phases.py` | rule-based draft phase labels (drive, turn, flank, idle, away) for all tracked time |
+| `shepherd/phases.py` | rule-based draft phase labels (drive, turn, flank, idle, away) for any `Track`: positions, sampling interval, which row is the dog |
 | `shepherd/video.py` | video → clean tracks: YOLO + ByteTrack detection, cleaning to metres at 10 Hz, flock series, phase labels |
 | `shepherd/weights.py`, `shepherd/finetune.py` | pinned detector downloads with checksum and pickle checks; YOLO dataset helpers for fine-tuning |
 | `shepherd/box_labeler.py` | local server for `viz/box_labeler.html`: reads and saves YOLO labels and the review state |
-| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases` (see REPORT.md), `label_video` (video → clean data), `finetune_detector` (sheep/dog/person detector), `box_labeler` (fix detector boxes) |
-| `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data); `labeler.html` (video labeler) |
+| `experiments/` | `protocol_check`, `replay_check`, `build_table`, `fit_kernels`, `compare_models`, `label_phases`, `label_simulations`, `pair_attraction` (see REPORT.md), `label_video` (video → clean data), `finetune_detector` (sheep/dog/person detector), `box_labeler` (fix detector boxes) |
+| `viz/` | interactive viewer: `app.html` (page), `sim.js` (model in JS), `build.py` (embeds the data); `labeler.html` (video labeler); `phases_app.html`, `build_phases.py` (phase replay) |
 | `reproduce.py` | regenerates the paper's Figs 1b–6 and the summary numbers |
 | `data/upstream/` | the authors' data, `.mat` files (used to verify the port) and MATLAB model, from commit `2c02a88` |
 

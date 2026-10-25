@@ -309,6 +309,7 @@ class VideoSegment:
     label: str
     flock_speed: float
     dog_dist: float
+    dog_nearest_sheep: float  # NaN: needs individual sheep positions
     psi_bd: float
     heading_change: float
     cohesion: float
