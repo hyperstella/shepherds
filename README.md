@@ -50,8 +50,11 @@ matches the Python version's statistics.
 `experiments/label_video.py` turns a herding video into clean data with no manual labelling. It
 runs on your machine:
 
-1. **Detect and track.** A COCO-pretrained YOLO model (`yolo11n.pt`, downloaded once) finds
-   `sheep`, `dog` and `person` (taken as the shepherd), and ByteTrack links the boxes into tracks.
+1. **Detect and track.** A YOLO model finds sheep, and ByteTrack links the boxes into tracks. The
+   default, `icaerus-n`, is a drone-sheep detector downloaded once (see "Detector choice"). It
+   detects sheep only, so dogs and people need a fine-tuned model (see "Fine-tuning for the dog")
+   or a COCO model such as `--model yolo11x.pt` for ground-level video, which also finds `dog` and
+   `person` (taken as the shepherd).
 2. **Clean.** Tracks shorter than 1 s are dropped, and each track takes its majority class.
    Positions are converted to metres and resampled to 10 Hz like the UWB data. Gaps up to 1 s are
    interpolated and the tracks are smoothed over 0.5 s. Dog and shepherd fragments are stitched
@@ -79,7 +82,7 @@ Units matter: the phase thresholds are in metres and m/s. For oblique footage, p
 `--px-per-m`. With neither, the scale is guessed from the median sheep box, assuming a 1.2 m
 sheep, which is only reasonable for top-down video. `--session` and `--offset` put the times on
 the UWB clock (tracking time = video time + offset). `--stride 2` halves the detector's work.
-`--model` takes other YOLO weights or a shortcut (`icaerus`, `icaerus-n`; see below). Classes are
+`--model` takes other YOLO weights or a shortcut (`icaerus-n`, the default, or `icaerus`; see below). Classes are
 matched by name (`sheep`, `dog`, `person`/`human`), so a sheep-only drone model works too.
 
 `tests/test_video.py` checks the cleaning and labelling without the model. It renders a real
@@ -102,10 +105,29 @@ frames 0, 35 and 70:
 | `--model icaerus-n` (YOLO11n) | 41 / 21 / 3 | never |
 | **`--model icaerus`** (YOLOv8m v4) | **51 / 30 / 8**: about 94% recall on frame 0 and 80% on frame 35, with misses in the shadowed back of the flock | boxed as a sheep |
 
-COCO models were trained on side views and miss sheep seen from above. Use `--model icaerus` for
-drone footage. It downloads once into `models/`, pinned to a commit and a SHA-256, and runs at its
-training settings (640 px, conf 0.5). This clip probably overlaps ICAERUS's training data, so
-expect lower recall on your own footage.
+COCO models were trained on side views and miss sheep seen from above. On this clip the larger
+`icaerus` looked best, but the clip probably overlaps ICAERUS's training data. The independent
+benchmark below reverses the order, so the default is `icaerus-n` at 1280 px. Shortcut weights
+download once into `models/`, pinned to a commit and a SHA-256.
+
+**Benchmark against hand-drawn boxes.** `experiments/benchmark_auth_sheep.py` scores detectors on
+[AUTH-Sheep](https://zenodo.org/records/13843376) (CC BY 4.0), which is 4K drone video from a
+different farm with every sheep, goat and person boxed by hand. On videos 2–4 (138 frames, one per
+second, 3,613 sheep and goats), counting a box as a hit at IoU 0.5:
+
+| Model, input size | AP50 | Precision | Recall | Sheep recall | Goat recall | Boxes on people | s/frame (CPU) |
+|---|---|---|---|---|---|---|---|
+| `icaerus-n`, 1280 | **0.51** | 0.69 | **0.54** | 0.66 | **0.28** | 2 | 0.2 |
+| `icaerus`, 1920 | 0.38 | 0.63 | 0.49 | **0.70** | 0.02 | 0 | 1.7 |
+| `icaerus`, 1280 | 0.36 | 0.62 | 0.48 | 0.67 | 0.04 | 1 | 1.8 |
+| `icaerus`, 640 | 0.35 | 0.61 | 0.40 | 0.53 | 0.11 | 8 | 0.5 |
+| `yolo11x.pt` (COCO), 1280 | 0.15 | 0.68 | 0.08 | 0.11 | 0.00 | 0 | 2.7 |
+
+On footage it was not trained on, ICAERUS finds about half the flock, far below what it achieves on
+its own clips. Goats are mostly missed, so mixed flocks will be undercounted. The small
+`icaerus-n` at 1280 px scores best overall and runs fastest, so it is the default for
+`label_video.py`, `prelabel` and `train`. `--model icaerus` (at 640 px unless `--imgsz` is
+given) remains available.
 
 No available model finds the dog from above, so phases on drone video read `away` until you
 fine-tune.
@@ -116,9 +138,9 @@ fine-tune.
 steps:
 
 ```bash
-.venv/bin/python experiments/finetune_detector.py prelabel drive*.mp4 --out data/finetune   # ICAERUS pre-draws sheep
+.venv/bin/python experiments/finetune_detector.py prelabel drive*.mp4 --out data/finetune   # icaerus-n pre-draws sheep
 .venv/bin/python experiments/box_labeler.py data/finetune                                   # fix boxes, add dogs and people
-.venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60           # starts from ICAERUS
+.venv/bin/python experiments/finetune_detector.py train data/finetune --epochs 60           # starts from icaerus-n
 .venv/bin/python experiments/finetune_detector.py eval data/finetune --model runs/finetune/sheepdog/weights/best.pt
 .venv/bin/python experiments/label_video.py drive9.mp4 --model runs/finetune/sheepdog/weights/best.pt
 ```
@@ -143,7 +165,19 @@ steps:
 - **Validation:** whole videos are held out, because frames from one drive are near-duplicates
   and would overstate accuracy.
 - **Augmentation:** rotations and flips are on, since nadir footage has no "up".
-- **Comparing models:** `eval` scores any model on the held-out frames. Run it on `icaerus` and on
+- **Frozen backbone (`--freeze 10`, the default):** only the detection head learns, so a small
+  dataset adds the dog class without eroding the base model's sheep detection. On a 14 s test clip
+  starting from `icaerus`, full fine-tuning on 36 frames cut held-out sheep recall from 97% to 78%;
+  with the backbone frozen it stayed at 94%. `--freeze 0` trains every layer, which is worth it once you have
+  thousands of labelled frames.
+- **No early stopping (`--patience 0`, the default):** the stopping score sums all classes, so
+  the many sheep boxes dominate it. With early stopping on, training stopped on epoch-1 weights
+  that had learned nothing about the dog. For the same reason, compare `last.pt` and `best.pt`
+  with `eval`.
+- **Dog data:** these settings protect sheep accuracy but do not make the dog appear. On that
+  test clip, 36 boxes of one dog over 7 s gave 0% held-out dog recall under every setting. The
+  dog needs varied examples: different dogs, light, poses and videos.
+- **Comparing models:** `eval` scores any model on the held-out frames. Run it on `icaerus-n` and on
   your model to see the gain. Scores mean nothing until a person has corrected the held-out
   labels, because uncorrected pre-labels only measure the base model against itself.
 - **How much to label:** a few hundred frames with the dog in shot, spread across videos, light
@@ -155,6 +189,39 @@ steps:
 YOLO weights are pickles, and unpickling can run code. Every external `.pt` is therefore scanned
 before use, without being loaded, and refused if it imports anything beyond torch/ultralytics
 classes (`shepherd/weights.py`).
+
+### Video against the Jadhav UWB data
+
+`experiments/video_vs_jadhav.py` measures the paper's flock and dog observables from drone video and
+from the UWB drives with the same code. The dog is located by a white-blob tracker, checked by eye,
+in 6 of the 16 ICAERUS flights (`results/icaerus_dog_tracks.csv`). Sheep are tracked with
+`icaerus-n` at 10 Hz. 159 frames (16 s) have the dog and at least 8 moving sheep in view; the UWB
+drives give 848 s.
+
+| Observable (median, IQR) | Video | UWB (Jadhav) | Model parameter |
+|---|---|---|---|
+| Polarization P | 0.98 (0.95–0.99) | 0.92 (0.83–0.96) | |
+| Elongation E | 2.31 (1.54–3.38) | 1.02 (0.77–1.39) | |
+| Nearest-neighbour distance (m) | 0.60 (0.49–0.82) | 0.50 (0.43–0.57) | `r_rep` scale |
+| Sheep speed (m/s) | 1.10 (0.81–1.55) | 1.09 (0.83–1.60) | `v_sheep` = 1.0 |
+| Dog speed (m/s) | 1.24 (0.64–1.93) | 1.26 (0.77–2.02) | `v_dog` = 1.5 |
+| Dog–barycentre distance (m) | 5.8 (3.6–6.9) | 5.0 (4.0–6.1) | |
+| Dog–barycentre / NND | 7.6 (6.3–11.3) | 10.3 (7.9–13.2) | |
+| \|ψ_BD\| (deg; 180 = directly behind) | 162 (81–173) | 156 (140–168) | |
+| Dog behind the rearmost sheep | 36% | 94% | |
+
+Speeds and spacing agree to within the ±20% scale uncertainty. The metres come from sheep box size,
+because the flight log's altitudes give scales that cannot fit the visible flock. The flocks differ
+where the setting does:
+- **Elongation and polarization are higher:** these clips are sheep walking in single file down a
+  lane behind a shepherd.
+- **The dog is behind the flock far less often:** it accompanies the flock rather than driving it.
+
+The pooled medians also hide large differences between clips. In one flight the dog runs ahead of
+the flock at 3 m/s; in another it stays behind it throughout. Sheep speed shows no clear dependence on
+distance to the dog, so `r_dog` cannot be estimated from this footage. Treat these numbers as a
+consistency check on scale and speed, not as a test of the herding model, which needs footage of a
+dog actually driving a flock.
 
 ### Reviewing in the browser
 
