@@ -190,6 +190,39 @@ YOLO weights are pickles, and unpickling can run code. Every external `.pt` is t
 before use, without being loaded, and refused if it imports anything beyond torch/ultralytics
 classes (`shepherd/weights.py`).
 
+### Video against the Jadhav UWB data
+
+`experiments/video_vs_jadhav.py` measures the paper's flock and dog observables from drone video and
+from the UWB drives with the same code. The dog is located by a white-blob tracker, checked by eye,
+in 6 of the 16 ICAERUS flights (`results/icaerus_dog_tracks.csv`). Sheep are tracked with
+`icaerus-n` at 10 Hz. 159 frames (16 s) have the dog and at least 8 moving sheep in view; the UWB
+drives give 848 s.
+
+| Observable (median, IQR) | Video | UWB (Jadhav) | Model parameter |
+|---|---|---|---|
+| Polarization P | 0.98 (0.95–0.99) | 0.92 (0.83–0.96) | |
+| Elongation E | 2.31 (1.54–3.38) | 1.02 (0.77–1.39) | |
+| Nearest-neighbour distance (m) | 0.60 (0.49–0.82) | 0.50 (0.43–0.57) | `r_rep` scale |
+| Sheep speed (m/s) | 1.10 (0.81–1.55) | 1.09 (0.83–1.60) | `v_sheep` = 1.0 |
+| Dog speed (m/s) | 1.24 (0.64–1.93) | 1.26 (0.77–2.02) | `v_dog` = 1.5 |
+| Dog–barycentre distance (m) | 5.8 (3.6–6.9) | 5.0 (4.0–6.1) | |
+| Dog–barycentre / NND | 7.6 (6.3–11.3) | 10.3 (7.9–13.2) | |
+| \|ψ_BD\| (deg; 180 = directly behind) | 162 (81–173) | 156 (140–168) | |
+| Dog behind the rearmost sheep | 36% | 94% | |
+
+Speeds and spacing agree to within the ±20% scale uncertainty. The metres come from sheep box size,
+because the flight log's altitudes give scales that cannot fit the visible flock. The flocks differ
+where the setting does:
+- **Elongation and polarization are higher:** these clips are sheep walking in single file down a
+  lane behind a shepherd.
+- **The dog is behind the flock far less often:** it accompanies the flock rather than driving it.
+
+The pooled medians also hide large differences between clips. In one flight the dog runs ahead of
+the flock at 3 m/s; in another it stays behind it throughout. Sheep speed shows no clear dependence on
+distance to the dog, so `r_dog` cannot be estimated from this footage. Treat these numbers as a
+consistency check on scale and speed, not as a test of the herding model, which needs footage of a
+dog actually driving a flock.
+
 ### Reviewing in the browser
 
 `viz/labeler.html` is the review tool. It needs no build step: open it in a browser and drop in
