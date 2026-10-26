@@ -65,35 +65,48 @@ def turn_test(base, sheep, dog, n=N_DRAW, reps=4, t_max=120.0, seed=5):
             "cohesion": float(C.mean())}
 
 
-def main():
+def context(model="M3tau"):
+    """Everything evaluate() compares against: data statistics, sheep draws, the measured collie."""
     drives = data.load_drives(data.load_sessions())
-    dog = measured_dog()
-    tab = load("M3tau")
-    sheep = draws(posterior(tab, "M3tau"), N_DRAW)
+    tab = load(model)
     meta = {k[5:]: v for k, v in tab.items() if k.startswith("meta_")}
     obs_w = meta["obs"][:, COLS]
-    obs = ABC.aggregate(obs_w[None], meta["durations"])[0]
-    scale = np.nanstd(obs_w, axis=0)
     real_long = SC.real_long_segments(drives, dt=DT)
     lw = np.array([s.duration for s in real_long])
-    long_obs = {k: float(sum(np.nanmean(PR.long_summaries(s)[k]) * w for s, w in zip(real_long, lw)) / lw.sum())
-                for k in PR.LONG_KEYS}
+    return {
+        "drives": drives, "dog": measured_dog(), "sheep": draws(posterior(tab, model), N_DRAW),
+        "durations": meta["durations"], "obs": ABC.aggregate(obs_w[None], meta["durations"])[0],
+        "scale": np.nanstd(obs_w, axis=0), "lw": lw,
+        "long_obs": {k: float(sum(np.nanmean(PR.long_summaries(s)[k]) * w for s, w in zip(real_long, lw)) / lw.sum())
+                     for k in PR.LONG_KEYS},
+    }
+
+
+def evaluate(base, ctx):
+    """Short-window fit, long closed-loop drives and the 90° turn test for one model."""
+    drives, sheep, dog = ctx["drives"], ctx["sheep"], ctx["dog"]
+    segs = SC.replay_windows(drives, base, N_DRAW, 7, DT, per_run=sheep, speed_replay=True)
+    short = np.stack([np.stack([np.nanmean(PR.summaries(s)[k]) for k in FIT_STATS]) for s in segs])
+    sim = ABC.aggregate(short[None], ctx["durations"])[0]
+    z = (sim - ctx["obs"]) / ctx["scale"]
+    longs = SC.closed_loop_drives(drives, base, N_DRAW, 3, DT, per_run=sheep, dog=dog)
+    lw = ctx["lw"]
+    long = {k: float(sum(np.nanmean(PR.long_summaries(s)[k]) * w for s, w in zip(longs, lw)) / lw.sum())
+            for k in PR.LONG_KEYS}
+    return {"short_rms_z": float(np.sqrt(np.nanmean(z ** 2))), "slope_4a": float(sim[FIT_STATS.index("slope_4a")]),
+            "long": long, "turn_test": turn_test(base, sheep, dog)}
+
+
+def main():
+    ctx = context()
     kern = learned_dog_kernel()
-    out = {"data": {"short": dict(zip(FIT_STATS, map(float, obs))), "long": long_obs}, "gains": {}}
+    out = {"data": {"short": dict(zip(FIT_STATS, map(float, ctx["obs"]))), "long": ctx["long_obs"]}, "gains": {}}
     for g in GAINS:
         base = Params(v_sheep=V_SHEEP[DT], dog_kernel=kern if g > 0 else None, g_dogk=g)
-        segs = SC.replay_windows(drives, base, N_DRAW, 7, DT, per_run=sheep, speed_replay=True)
-        short = np.stack([np.stack([np.nanmean(PR.summaries(s)[k]) for k in FIT_STATS]) for s in segs])
-        sim = ABC.aggregate(short[None], meta["durations"])[0]
-        z = (sim - obs) / scale
-        longs = SC.closed_loop_drives(drives, base, N_DRAW, 3, DT, per_run=sheep, dog=dog)
-        long = {k: float(sum(np.nanmean(PR.long_summaries(s)[k]) * w for s, w in zip(longs, lw)) / lw.sum())
-                for k in PR.LONG_KEYS}
-        turn = turn_test(base, sheep, dog)
-        out["gains"][g] = {"short_rms_z": float(np.sqrt(np.nanmean(z ** 2))), "slope_4a": float(sim[FIT_STATS.index("slope_4a")]),
-                           "long": long, "turn_test": turn}
-        print(f"g={g:4.1f}  short RMS z {out['gains'][g]['short_rms_z']:.2f}  slope_4a {out['gains'][g]['slope_4a']:+.2f} "
-              f"(data {obs[FIT_STATS.index('slope_4a')]:+.2f})  long C {long['C_med']:.2f} P {long['P_med']:.2f} "
+        r = out["gains"][g] = evaluate(base, ctx)
+        long, turn = r["long"], r["turn_test"]
+        print(f"g={g:4.1f}  short RMS z {r['short_rms_z']:.2f}  slope_4a {r['slope_4a']:+.2f} "
+              f"(data {ctx['obs'][FIT_STATS.index('slope_4a')]:+.2f})  long C {long['C_med']:.2f} P {long['P_med']:.2f} "
               f"drift {long['C_drift']:.2f} far {long['frac_far']:.2f}  turn test {turn['success']:.2f} "
               f"in {turn['time_s']} s (C {turn['cohesion']:.1f})")
     (OUT / "dog_response.json").write_text(json.dumps(out, indent=2, default=float))

@@ -3,6 +3,7 @@
     "smooth_s": 2.0,
     "idle_speed": 0.25,
     "away_dist": 15.0,
+    "away_from": "centre",
     "behind_deg": 120.0,
     "turn_window_s": 10.0,
     "turn_deg": 120.0,

@@ -22,7 +22,7 @@ INIT, DRIVE, COLLECT, SLOW, REPLAY = 0, 1, 2, 3, 4
 PER_RUN_FIELDS = (
     "r_rep", "r_dog", "v_sheep", "v_dog", "w_inertia", "w_rep", "w_dog", "noise", "w_att", "w_ali",
     "dog_slow_step", "l_sep", "l_drive", "l_collect", "tau_s", "tau_d", "noise_dog",
-    "flank_sigma", "flank_tau", "dog_speed_gain", "g_dogk",
+    "flank_sigma", "flank_tau", "dog_speed_gain", "g_dogk", "g_pairk",
 )
 
 
@@ -70,6 +70,11 @@ class Params:
     # about dt * a / v_sheep, weighted by the sum of the other weights times g_dogk.
     dog_kernel: tuple | None = None
     g_dogk: float = 1.0
+    # Learned sheep-sheep attraction/repulsion (shepherd/kernels.py, term E), as (knots, coef_E):
+    # a_i = sum_j phi_E(r_ij) e_ij, entering the heading rule like dog_kernel, with gain g_pairk.
+    # It acts where the other social terms act (sheep that see the dog, or all with social_always).
+    pair_kernel: tuple | None = None
+    g_pairk: float = 1.0
 
     def resolved(self):
         n = self.n_sheep
@@ -226,6 +231,12 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
         dk_basis = HatBasis(tuple(p.dog_kernel[0]))
         dk_D, dk_V, dk_L = (np.asarray(c, float) for c in p.dog_kernel[1:])
         dog_vel = vel_d.copy() if dog_path is not None else vel_d * c2["v_dog"]  # actual velocity, m/s
+    if p.pair_kernel is not None:
+        from .kernels import HatBasis
+
+        pk_basis = HatBasis(tuple(p.pair_kernel[0]))
+        pk_E = np.asarray(p.pair_kernel[1], float)
+        off_diag = ~np.eye(N, dtype=bool)
 
     for t in range(1, p.n_steps):
         d = _draw_step(rng, R, p)
@@ -269,16 +280,20 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
             c3["w_inertia"] * vel_s + c3["w_rep"] * rep + c3["w_dog"] * away
             + c3["w_att"] * s_att + c3["noise"] * noise + c3["w_ali"] * s_ali
         )
+        W = c3["w_inertia"] + c3["w_rep"] + c3["w_dog"] + c3["w_att"] + c3["noise"] + c3["w_ali"]
+        v_sheep_now = c3["v_sheep"] if speed_path is None else speed_path[:, max(t - 1, 0), None, None]
+        if p.pair_kernel is not None:
+            phi = pk_basis(dist) @ pk_E * off_diag  # (R, N, N)
+            a_pair = np.einsum("rij,rijc->ric", phi, np.nan_to_num(u_ij))  # toward neighbours where phi > 0
+            active = active + c3["g_pairk"] * W * dt * a_pair / v_sheep_now
         if p.dog_kernel is not None:
             B = dk_basis(dog_dist)  # (R, N, K)
             e = np.nan_to_num(away)  # unit vector from the dog to the sheep
-            v_sheep_now = c3["v_sheep"] if speed_path is None else speed_path[:, max(t - 1, 0), None, None]
             closing = np.maximum(0.0, ((dog_vel[:, None, :] - vel_s * v_sheep_now) * e).sum(-1))
             a_dog = ((B @ dk_D)[..., None] * e + (B @ dk_V)[..., None] * dog_vel[:, None, :]
                      + ((B @ dk_L) * closing)[..., None] * e)
             if p.social_always:
                 a_dog = np.where(sees_dog[..., None], a_dog, 0.0)
-            W = c3["w_inertia"] + c3["w_rep"] + c3["w_dog"] + c3["w_att"] + c3["noise"] + c3["w_ali"]
             active = active + c3["g_dogk"] * W * dt * a_dog / v_sheep_now
         grazing = c3["w_inertia"] * vel_s + c3["w_rep"] * rep
         with np.errstate(invalid="ignore"):

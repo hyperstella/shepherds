@@ -1,0 +1,538 @@
+<meta charset="utf-8">
+<title>Flock Phase Replay</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: instrument panel. Segment log on the left, the field (particles) as the hero, session tape beneath. */
+:root {
+  --bg: #eef0ec;
+  --panel: #f8f9f6;
+  --field: #e3e7df;
+  --grid: #d2d8cc;
+  --fg: #1d2420;
+  --muted: #5e6a62;
+  --line: #c9d0c4;
+  --sheep: #2f3a33;
+  --dog: #c2410c;
+  --shepherd: #6d28d9;
+  --drive: #2a78d6;
+  --turn: #e0622b;
+  --flank: #159b6b;
+  --idle: #a7aaa2;
+  --away: #8a6fd1;
+  --hand: #1d2420;
+  --focus: #2a78d6;
+  --edge: #7d8a6f;
+  --display: "Fraunces", Georgia, serif;
+  --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131815; --panel: #1a201c; --field: #0e1210; --grid: #222a25; --fg: #e4e9e3; --muted: #94a199;
+    --line: #2c3530; --sheep: #e8ede6; --dog: #fb8c4a; --shepherd: #b69cff; --drive: #5ea0ee; --turn: #f2834f;
+    --flank: #3cc492; --idle: #6f746c; --away: #a68ff0; --hand: #e4e9e3; --focus: #5ea0ee; --edge: #8f9c80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131815; --panel: #1a201c; --field: #0e1210; --grid: #222a25; --fg: #e4e9e3; --muted: #94a199;
+  --line: #2c3530; --sheep: #e8ede6; --dog: #fb8c4a; --shepherd: #b69cff; --drive: #5ea0ee; --turn: #f2834f;
+  --flank: #3cc492; --idle: #6f746c; --away: #a68ff0; --hand: #e4e9e3; --focus: #5ea0ee; --edge: #8f9c80; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font: 15px/1.45 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+h1 { font: 600 1.6rem/1.1 var(--display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } .log { order: 2; } }
+
+.log { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-width: 0; max-height: 78vh; }
+.groups { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
+.groups button { font: 600 12px/1.25 var(--body); padding: 10px 6px; border: 0; border-right: 1px solid var(--line); background: transparent;
+  color: var(--muted); cursor: pointer; text-align: center; }
+.groups button:last-child { border-right: 0; }
+.groups button[aria-selected="true"] { color: var(--fg); background: var(--field); box-shadow: inset 0 -3px 0 var(--fg); }
+.groups button small { display: block; font: 400 11px var(--mono); color: var(--muted); margin-top: 2px; }
+.groups button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-bottom: 1px solid var(--line); }
+.chip { font: 600 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 8px; border-radius: 3px;
+  border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.chip[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
+.chip .sw { width: 8px; height: 8px; border-radius: 2px; }
+.count { padding: 8px 10px; font: 12px var(--mono); color: var(--muted); border-bottom: 1px solid var(--line); }
+ol.segs { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 120px; }
+ol.segs button { width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--fg);
+  padding: 8px 10px; display: grid; grid-template-columns: 6px 1fr auto; gap: 4px 10px; cursor: pointer; font: inherit; }
+ol.segs button:hover { background: var(--field); }
+ol.segs button[aria-current="true"] { background: var(--field); outline: 2px solid var(--focus); outline-offset: -2px; }
+.bar { grid-row: span 2; border-radius: 2px; }
+.s-top { font: 600 13px var(--mono); font-variant-numeric: tabular-nums; }
+.s-dur { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.s-sub { grid-column: 2 / span 2; font-size: 12px; color: var(--muted); }
+.tag { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 5px; border-radius: 2px; border: 1px solid currentColor; margin-left: 6px; }
+
+.stage { display: grid; gap: 10px; min-width: 0; }
+.fieldbox { position: relative; background: var(--field); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 10; max-width: 100%; }
+canvas#field { width: 100%; height: 100%; display: block; }
+.badge { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 10px; font: 600 13px var(--mono); text-transform: uppercase; letter-spacing: 0.06em; }
+.badge .sw { width: 10px; height: 10px; border-radius: 2px; }
+.badge .hand { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.clock { position: absolute; top: 12px; right: 12px; font: 600 13px var(--mono); font-variant-numeric: tabular-nums; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; }
+.legend { position: absolute; bottom: 10px; left: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; font: 12px var(--mono); color: var(--muted); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.legend i { display: inline-block; width: 9px; height: 9px; }
+.scale { position: absolute; bottom: 10px; right: 12px; font: 12px var(--mono); color: var(--muted); text-align: right; }
+.scale div { height: 2px; background: var(--muted); margin-top: 3px; margin-left: auto; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 600 13px var(--body); padding: 7px 12px; border-radius: 4px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); min-width: 76px; }
+.btn[aria-pressed="true"] { border-color: var(--fg); }
+.btn:focus-visible, .chip:focus-visible, ol.segs button:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+select { font: 13px var(--body); padding: 6px 8px; border-radius: 4px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+.kbd { margin-left: auto; font: 12px var(--mono); color: var(--muted); }
+@media (max-width: 600px) { .kbd { display: none; } }
+
+.tape { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.tape-head { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+canvas#tape { width: 100%; height: 46px; display: block; cursor: pointer; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.stat { background: var(--panel); padding: 8px 12px; }
+.stat dt { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.stat dd { margin: 2px 0 0; font: 600 16px var(--mono); font-variant-numeric: tabular-nums; }
+.stat dd small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.note { font-size: 13px; color: var(--muted); max-width: 90ch; margin: 0; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Flock Phase Replay</h1>
+    <p>Draft phase labels from <code>shepherd/phases.py</code> on the UWB tracks of Jadhav et al. (2024), 14 sheep, one collie and one shepherd at 10 Hz, and on two models doing the same task: drive the flock 60 m from A to B and back for 10 minutes.</p>
+  </header>
+
+  <div class="main">
+    <aside class="log" aria-label="Segments">
+      <div class="groups" id="groups" role="tablist" aria-label="Source"></div>
+      <div class="filters" id="filters"></div>
+      <div class="count" id="count"></div>
+      <ol class="segs" id="segs"></ol>
+    </aside>
+
+    <section class="stage">
+      <div class="fieldbox">
+        <canvas id="field" aria-label="Particle replay of the flock"></canvas>
+        <div class="badge" id="badge"><span class="sw" id="badge-sw"></span><span id="badge-label">drive</span><span class="hand" id="badge-hand"></span></div>
+        <div class="clock" id="clock">S1 · 0:00.0</div>
+        <div class="legend" id="legend"></div>
+        <div class="scale" id="scale"><span id="scale-label">5 m</span><div id="scale-bar"></div></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="play">Pause</button>
+        <button class="btn" id="prev">Previous</button>
+        <button class="btn" id="next">Next</button>
+        <label for="speed" class="sr">Speed</label>
+        <select id="speed">
+          <option value="1">1× real time</option>
+          <option value="2" selected>2×</option>
+          <option value="4">4×</option>
+          <option value="8">8×</option>
+        </select>
+        <button class="btn" id="loop" aria-pressed="true">Loop segment</button>
+        <button class="btn" id="follow" aria-pressed="true">Follow flock</button>
+        <button class="btn" id="trails" aria-pressed="true">Trails</button>
+        <span class="kbd">space play · ←/→ segment</span>
+      </div>
+
+      <div class="tape">
+        <div class="tape-head"><span id="tape-title">Session 1</span><span id="tape-key">top: draft labels · bottom: hand-labelled drives</span></div>
+        <canvas id="tape" aria-label="Session timeline; click to seek"></canvas>
+      </div>
+
+      <dl class="stats" id="stats"></dl>
+      <p class="note" id="note-real">Labels are geometric proxies: the shepherd's commands were not recorded, so a label says where the collie was, not what it was asked to do. "Candidate" marks draft drives of 20 s or more outside the authors' hand-labelled drives. No fences, target markers or obstacles were mapped. The paper describes a flat 80 × 50 m pasture and a drive between two points, A and B, 60 m apart. The dashed outline is the furthest any tracked animal went across all sessions. The diamonds mark where the flock turned around, which is likely near A and B.</p>
+      <p class="note" id="note-sim" hidden></p>
+    </section>
+  </div>
+</div>
+
+<script id="payload" type="application/json">__PAYLOAD__</script>
+<script>
+(() => {
+const P = JSON.parse(document.getElementById('payload').textContent);
+const raw = atob("__POS__");
+const buf = new ArrayBuffer(raw.length);
+const u8 = new Uint8Array(buf);
+for (let i = 0; i < raw.length; i++) u8[i] = raw.charCodeAt(i);
+const POS = new Int16Array(buf); // (frame, 16 rows, xy), units of 1/track.scale m
+const NI = P.nInd;
+const LABELS = ['drive', 'turn', 'flank', 'idle', 'away'];
+const LABEL_TEXT = { drive: 'Drive', turn: 'Turn', flank: 'Flank', idle: 'Idle', away: 'Away' };
+const GROUPS = [
+  { id: 'real', name: 'Real collie', sub: '9 sessions' },
+  { id: 'published', name: 'Published model', sub: '16 runs' },
+  { id: 'calibrated', name: 'Calibrated model', sub: '16 runs' },
+];
+const SIM_NOTE = {
+  published: 'The model as in the paper\'s code: 1 s steps, the dog aims 7.5 m behind the flock. Sheep only move when the dog is within 12 m or a neighbour is within 2 m. The target switches between A and B when the flock centre comes within 5 m of it.',
+  calibrated: 'The calibrated model (M4τ): fitted sheep rules, the measured collie and the learned response to the dog, in 0.2 s steps. The target switches between A and B when the flock centre comes within 5 m of it. In most runs the flock stalls at some point and the dog ends up more than 15 m away.',
+};
+const trackByKey = Object.fromEntries(P.tracks.map(s => [s.key, s]));
+P.segments.forEach((g, i) => {
+  const s = trackByKey[g.track];
+  g.i = i; g.group = s.group; g.f0 = Math.round(g.start_s / s.dt); g.f1 = Math.round(g.end_s / s.dt);
+});
+
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+let C = {};
+const readColors = () => { for (const k of ['bg','field','grid','fg','muted','sheep','dog','shepherd','hand','edge', ...LABELS]) C[k] = css('--' + k); };
+readColors();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); drawTape(); });
+new MutationObserver(() => { readColors(); drawTape(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+const state = { group: 'real', filter: new Set(LABELS), candOnly: false, seg: null, frame: 0, playing: true, speed: 2, loop: true, follow: true, trails: true, cam: null };
+
+// --- data access
+const px = (s, f, i, k) => POS[((s.offset + f) * NI + i) * 2 + k] / s.scale;
+function bary(s, f) { let x = 0, y = 0; for (let i = 0; i < s.nSheep; i++) { x += px(s, f, i, 0); y += px(s, f, i, 1); } return [x / s.nSheep, y / s.nSheep]; }
+const fmtT = t => { const m = Math.floor(t / 60), sec = t - m * 60; return `${m}:${sec.toFixed(1).padStart(4, '0')}`; };
+const fmt = (v, d) => v == null ? '—' : v.toFixed(d);
+function targetAt(s, t) { let cur = s.targets[0]; for (const e of s.targets) if (e[0] <= t) cur = e; return cur; }
+
+// --- source tabs
+const groupsEl = document.getElementById('groups');
+for (const G of GROUPS) {
+  const b = document.createElement('button');
+  b.setAttribute('role', 'tab'); b.id = `tab-${G.id}`;
+  b.innerHTML = `${G.name}<small>${G.sub}</small>`;
+  b.onclick = () => setGroup(G.id, true);
+  groupsEl.appendChild(b);
+}
+function setGroup(id, pick) {
+  state.group = id;
+  groupsEl.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.id === `tab-${id}`));
+  candChip.hidden = id !== 'real';
+  if (id !== 'real' && state.candOnly) { state.candOnly = false; candChip.setAttribute('aria-pressed', false); }
+  document.getElementById('note-real').hidden = id !== 'real';
+  const ns = document.getElementById('note-sim');
+  ns.hidden = id === 'real'; ns.textContent = SIM_NOTE[id] || '';
+  renderLegend(); renderList();
+  if (pick) {
+    const first = (id === 'real' && P.segments.find(g => g.candidate)) || visible[0];
+    if (first) select(first, true);
+  }
+}
+
+// --- legend
+function renderLegend() {
+  const real = state.group === 'real';
+  const items = [
+    '<span><i style="background:var(--sheep);border-radius:50%"></i>sheep</span>',
+    `<span><i style="background:var(--dog);border-radius:50%"></i>${real ? 'collie' : 'model dog'}</span>`,
+    real ? '<span><i style="background:var(--shepherd)"></i>shepherd</span>' : '',
+    '<span><i style="border:1.5px solid var(--muted);border-radius:50%;background:transparent"></i>flock centre + heading</span>',
+    real ? '<span><i style="border-top:1.5px dashed var(--edge);height:0;width:14px"></i>area used (inferred)</span>' : '',
+    real ? '<span><i style="background:var(--edge);transform:rotate(45deg) scale(.8)"></i>turnaround (inferred)</span>'
+         : '<span><i style="background:var(--edge);transform:rotate(45deg) scale(.8)"></i>targets A, B (current one ringed)</span>',
+  ];
+  document.getElementById('legend').innerHTML = items.join('');
+  document.getElementById('tape-key').textContent = real ? 'top: draft labels · bottom: hand-labelled drives' : 'top: draft labels · bottom: heading for B';
+}
+
+// --- segment log
+const filtersEl = document.getElementById('filters');
+function chip(text, color, pressed, onClick) {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.setAttribute('aria-pressed', pressed);
+  b.innerHTML = (color ? `<span class="sw" style="background:var(--${color})"></span>` : '') + text;
+  b.onclick = () => { onClick(b); renderList(); };
+  filtersEl.appendChild(b); return b;
+}
+LABELS.forEach(l => chip(l, l, true, b => {
+  state.filter.has(l) ? state.filter.delete(l) : state.filter.add(l);
+  b.setAttribute('aria-pressed', state.filter.has(l));
+}));
+const candChip = chip('candidates only', null, false, b => { state.candOnly = !state.candOnly; b.setAttribute('aria-pressed', state.candOnly); });
+
+const listEl = document.getElementById('segs');
+let visible = [];
+function renderList() {
+  const inGroup = P.segments.filter(g => g.group === state.group);
+  visible = inGroup.filter(g => state.filter.has(g.label) && (!state.candOnly || g.candidate));
+  const mins = visible.reduce((a, g) => a + g.end_s - g.start_s, 0) / 60;
+  document.getElementById('count').textContent = `${visible.length} of ${inGroup.length} segments · ${mins.toFixed(1)} min`;
+  listEl.innerHTML = '';
+  for (const g of visible) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.dataset.i = g.i;
+    const hand = g.hand_drive_overlap >= 0.5 ? '<span class="tag">hand drive</span>' : g.candidate ? '<span class="tag" style="color:var(--drive)">candidate</span>' : '';
+    const who = g.group === 'real' ? g.track : `Run ${trackByKey[g.track].key.replace(/\D/g, '')}`;
+    b.innerHTML = `<span class="bar" style="background:var(--${g.label})"></span>
+      <span class="s-top">${who} · ${fmtT(g.start_s)}${hand}</span>
+      <span class="s-dur">${(g.end_s - g.start_s).toFixed(1)} s</span>
+      <span class="s-sub">${LABEL_TEXT[g.label]} · flock ${fmt(g.flock_speed, 2)} m/s · dog ${fmt(g.dog_dist, 1)} m</span>`;
+    b.onclick = () => select(g, true);
+    li.appendChild(b); listEl.appendChild(li);
+  }
+  markCurrent();
+}
+function markCurrent() {
+  listEl.querySelectorAll('button').forEach(b => {
+    const on = state.seg && +b.dataset.i === state.seg.i;
+    b.setAttribute('aria-current', on);
+    if (on) b.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+// --- selection
+function select(g, fromUser) {
+  state.seg = g; state.frame = g.f0; state.cam = null;
+  const s = trackByKey[g.track];
+  const extra = s.group === 'real' ? `${fmtT(s.frames * s.dt)} tracked` : `${s.trips} trips in ${fmtT(s.frames * s.dt)} · ${s.dt} s steps`;
+  document.getElementById('tape-title').textContent = `${s.name} · ${extra}`;
+  const st = [
+    ['Label', LABEL_TEXT[g.label]],
+    ['Duration', `${(g.end_s - g.start_s).toFixed(1)} <small>s</small>`],
+    ['Flock speed', `${fmt(g.flock_speed, 2)} <small>m/s</small>`],
+    [s.group === 'real' ? 'Collie to flock' : 'Dog to flock', `${fmt(g.dog_dist, 1)} <small>m</small>`],
+    ['Dog angle ψ', `${fmt(g.psi_bd, 0)}<small>° from heading</small>`],
+    ['Heading change', `${fmt(g.heading_change, 0)}<small>° / 10 s</small>`],
+    ['Cohesion', `${fmt(g.cohesion, 2)} <small>m</small>`],
+    ['Shepherd to flock', s.shepherd == null ? '— <small>not modelled</small>' : `${fmt(g.shepherd_dist, 1)} <small>m</small>`],
+  ];
+  document.getElementById('stats').innerHTML = st.map(([k, v]) => `<div class="stat"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  drawTape(); markCurrent();
+  if (fromUser) { state.playing = true; syncPlay(); }
+}
+function step(dir) {
+  if (!visible.length) return;
+  let k = state.seg ? visible.findIndex(g => g.i === state.seg.i) : -1;
+  k = k < 0 ? 0 : (k + dir + visible.length) % visible.length;
+  select(visible[k], true);
+}
+function segAt(key, f) { return P.segments.find(g => g.track === key && f >= g.f0 && f < g.f1); }
+
+// --- controls
+const playBtn = document.getElementById('play');
+const syncPlay = () => { playBtn.textContent = state.playing ? 'Pause' : 'Play'; };
+playBtn.onclick = () => { state.playing = !state.playing; syncPlay(); };
+document.getElementById('prev').onclick = () => step(-1);
+document.getElementById('next').onclick = () => step(1);
+document.getElementById('speed').onchange = e => { state.speed = +e.target.value; };
+for (const id of ['loop', 'follow', 'trails']) {
+  const b = document.getElementById(id);
+  b.onclick = () => { state[id] = !state[id]; b.setAttribute('aria-pressed', state[id]); if (id === 'follow') state.cam = null; };
+}
+addEventListener('keydown', e => {
+  if (e.target.closest('select')) return;
+  if (e.code === 'Space') { e.preventDefault(); playBtn.click(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+});
+
+// --- tape
+const tape = document.getElementById('tape');
+function sizeCanvas(cv) {
+  const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return [w, h, d];
+}
+function drawTape() {
+  if (!state.seg) return;
+  const [w, h, d] = sizeCanvas(tape), ctx = tape.getContext('2d');
+  const s = trackByKey[state.seg.track], T = s.frames, dur = T * s.dt;
+  ctx.clearRect(0, 0, w, h);
+  const top = h * 0.08, bandH = h * 0.5, lowY = h * 0.68, lowH = h * 0.2;
+  for (const g of P.segments) if (g.track === s.key) {
+    ctx.fillStyle = C[g.label]; ctx.globalAlpha = g === state.seg ? 1 : 0.55;
+    ctx.fillRect(g.f0 / T * w, top, Math.max(1, (g.f1 - g.f0) / T * w), bandH);
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = C.hand;
+  if (s.group === 'real') {
+    for (const [a, b] of s.drives) ctx.fillRect(a / dur * w, lowY, (b - a) / dur * w, lowH);
+  } else {
+    s.targets.forEach((e, k) => {
+      const end = k + 1 < s.targets.length ? s.targets[k + 1][0] : dur;
+      if (e[1] === P.task.B[0] && e[2] === P.task.B[1]) ctx.fillRect(e[0] / dur * w, lowY, (end - e[0]) / dur * w, lowH);
+    });
+  }
+  const g = state.seg;
+  ctx.strokeStyle = C.fg; ctx.lineWidth = 1.5 * d;
+  ctx.strokeRect(g.f0 / T * w, top - 2 * d, (g.f1 - g.f0) / T * w, bandH + 4 * d);
+  const x = state.frame / T * w;
+  ctx.fillStyle = C.fg; ctx.fillRect(x - d, 0, 2 * d, h);
+}
+tape.addEventListener('click', e => {
+  if (!state.seg) return;
+  const r = tape.getBoundingClientRect(), s = trackByKey[state.seg.track];
+  const f = Math.min(s.frames - 1, Math.max(0, Math.round((e.clientX - r.left) / r.width * s.frames)));
+  const g = segAt(s.key, f);
+  if (g) { const keep = state.playing; select(g, false); state.frame = f; state.playing = keep; drawTape(); }
+});
+
+// --- field
+const field = document.getElementById('field');
+const trackBounds = {};
+function boundsFor(s) {
+  if (trackBounds[s.key]) return trackBounds[s.key];
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  const ext = (x, y) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; };
+  const rows = [...Array(s.nSheep).keys(), s.dog, ...(s.shepherd == null ? [] : [s.shepherd])];
+  const stride = Math.max(1, Math.round(0.5 / s.dt));
+  for (let f = 0; f < s.frames; f += stride) for (const i of rows) ext(px(s, f, i, 0), px(s, f, i, 1));
+  if (s.group === 'real') for (const [x, y] of P.field.hull) ext(x, y);
+  else { ext(...P.task.A); ext(...P.task.B); }
+  return (trackBounds[s.key] = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, span: Math.min(400, Math.max(x1 - x0, y1 - y0) + 4) });
+}
+function targetCam(s, f) {
+  if (!state.follow) return boundsFor(s);
+  const [bx, by] = bary(s, f);
+  let r = 0;
+  for (const i of [...Array(s.nSheep).keys(), s.dog]) r = Math.max(r, Math.hypot(px(s, f, i, 0) - bx, px(s, f, i, 1) - by));
+  return { cx: bx, cy: by, span: Math.min(400, Math.max(24, 2 * r + 6)) };
+}
+function diamond(ctx, x, y, r) { ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); }
+function drawField() {
+  const g = state.seg; if (!g) return;
+  const [w, h, d] = sizeCanvas(field), ctx = field.getContext('2d');
+  const s = trackByKey[g.track], f = Math.min(s.frames - 1, Math.floor(state.frame)), t = f * s.dt;
+  const tc = targetCam(s, f);
+  const a = state.cam ? 0.06 : 1;
+  state.cam = state.cam ? { cx: state.cam.cx + (tc.cx - state.cam.cx) * a, cy: state.cam.cy + (tc.cy - state.cam.cy) * a, span: state.cam.span + (tc.span - state.cam.span) * a } : { ...tc };
+  const cam = state.cam, sc = Math.min(w, h) / cam.span; // px per metre
+  const X = x => w / 2 + (x - cam.cx) * sc, Y = y => h / 2 - (y - cam.cy) * sc;
+
+  ctx.fillStyle = C.field; ctx.fillRect(0, 0, w, h);
+  const gs = cam.span > 160 ? 50 : cam.span > 80 ? 20 : cam.span > 40 ? 10 : 5;
+  ctx.strokeStyle = C.grid; ctx.lineWidth = d;
+  ctx.beginPath();
+  for (let gx = Math.floor((cam.cx - w / 2 / sc) / gs) * gs; X(gx) < w; gx += gs) { ctx.moveTo(X(gx), 0); ctx.lineTo(X(gx), h); }
+  for (let gy = Math.floor((cam.cy - h / 2 / sc) / gs) * gs; Y(gy) > 0; gy += gs) { ctx.moveTo(0, Y(gy)); ctx.lineTo(w, Y(gy)); }
+  ctx.stroke();
+  document.getElementById('scale-label').textContent = `${gs} m`;
+  document.getElementById('scale-bar').style.width = `${gs * sc / d}px`;
+
+  ctx.fillStyle = C.edge; ctx.strokeStyle = C.edge; ctx.font = `600 ${11 * d}px "JetBrains Mono", monospace`; ctx.textBaseline = 'middle';
+  if (s.group === 'real') {
+    // inferred layout: area used and turnaround points
+    ctx.lineWidth = 1.5 * d; ctx.setLineDash([6 * d, 4 * d]);
+    ctx.beginPath();
+    P.field.hull.forEach(([x, y], k) => k ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)));
+    ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+    for (const e of P.field.ends) {
+      diamond(ctx, X(e.x), Y(e.y), 6 * d); ctx.fill();
+      ctx.fillText(`${e.name} turnaround`, X(e.x) + 10 * d, Y(e.y));
+    }
+  } else {
+    // task targets; ring the current one with the 5 m arrival radius
+    const cur = targetAt(s, t);
+    for (const [name, p] of [['A', P.task.A], ['B', P.task.B]]) {
+      diamond(ctx, X(p[0]), Y(p[1]), 7 * d); ctx.fill();
+      ctx.fillText(`target ${name}`, X(p[0]) + 11 * d, Y(p[1]));
+      if (cur[1] === p[0] && cur[2] === p[1]) {
+        ctx.lineWidth = 1.5 * d; ctx.setLineDash([4 * d, 4 * d]);
+        ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), P.task.arrive * sc, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+  }
+
+  const rows = [...Array(s.nSheep).keys(), s.dog, ...(s.shepherd == null ? [] : [s.shepherd])];
+  // trails: last 4 s
+  const trailN = Math.round(4 / s.dt);
+  if (state.trails) {
+    for (const i of rows) {
+      const sheep = i < s.nSheep;
+      ctx.strokeStyle = i === s.dog ? C.dog : sheep ? C.sheep : C.shepherd;
+      ctx.lineWidth = (sheep ? 1 : 1.6) * d;
+      for (let k = Math.max(1, f - trailN); k <= f; k++) {
+        ctx.globalAlpha = 0.45 * (1 - (f - k) / trailN) * (sheep ? 0.6 : 1);
+        ctx.beginPath(); ctx.moveTo(X(px(s, k - 1, i, 0)), Y(px(s, k - 1, i, 1))); ctx.lineTo(X(px(s, k, i, 0)), Y(px(s, k, i, 1))); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // flock centre + heading (2 s)
+  const k0 = Math.max(0, f - Math.round(2 / s.dt));
+  const [bx, by] = bary(s, f), [ox, oy] = bary(s, k0);
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1.5 * d;
+  ctx.beginPath(); ctx.arc(X(bx), Y(by), 6 * d, 0, 2 * Math.PI); ctx.stroke();
+  const el = (f - k0) * s.dt || 1, vx = (bx - ox) / el, vy = (by - oy) / el, v = Math.hypot(vx, vy);
+  if (v > 0.15) {
+    const L = Math.min(5, 2.5 * v) * sc, ux = vx / v, uy = -vy / v;
+    const x1 = X(bx) + ux * L, y1 = Y(by) + uy * L;
+    ctx.beginPath(); ctx.moveTo(X(bx), Y(by)); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - ux * 7 * d - uy * 4 * d, y1 - uy * 7 * d + ux * 4 * d);
+    ctx.lineTo(x1 - ux * 7 * d + uy * 4 * d, y1 - uy * 7 * d - ux * 4 * d);
+    ctx.closePath(); ctx.fillStyle = C.muted; ctx.fill();
+  }
+
+  // particles
+  const rS = Math.max(2.5 * d, 0.32 * sc);
+  ctx.fillStyle = C.sheep;
+  for (let i = 0; i < s.nSheep; i++) { ctx.beginPath(); ctx.arc(X(px(s, f, i, 0)), Y(px(s, f, i, 1)), rS, 0, 2 * Math.PI); ctx.fill(); }
+  const dx = X(px(s, f, s.dog, 0)), dy = Y(px(s, f, s.dog, 1));
+  ctx.fillStyle = C.dog; ctx.beginPath(); ctx.arc(dx, dy, rS * 1.35, 0, 2 * Math.PI); ctx.fill();
+  ctx.strokeStyle = C.dog; ctx.globalAlpha = 0.35; ctx.lineWidth = d; ctx.setLineDash([3 * d, 3 * d]);
+  ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(X(bx), Y(by)); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  if (s.shepherd != null) {
+    const hx = X(px(s, f, s.shepherd, 0)), hy = Y(px(s, f, s.shepherd, 1)), hs = rS * 1.2;
+    ctx.fillStyle = C.shepherd; ctx.fillRect(hx - hs, hy - hs, 2 * hs, 2 * hs);
+  }
+
+  // overlays
+  const cur = segAt(s.key, f) || g;
+  document.getElementById('badge-sw').style.background = `var(--${cur.label})`;
+  document.getElementById('badge-label').textContent = LABEL_TEXT[cur.label];
+  let extra = '';
+  if (s.group === 'real') { if (s.drives.some(([a, b]) => t >= a && t <= b)) extra = '· hand-labelled drive'; }
+  else { const tg = targetAt(s, t); extra = `· heading for ${tg[1] === P.task.B[0] && tg[2] === P.task.B[1] ? 'B' : 'A'}`; }
+  document.getElementById('badge-hand').textContent = extra;
+  document.getElementById('clock').textContent = `${s.group === 'real' ? s.key : 'Run ' + s.key.replace(/\D/g, '')} · ${fmtT(t)}`;
+}
+
+// --- loop
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const g = state.seg;
+  if (g && state.playing) {
+    const s = trackByKey[g.track];
+    state.frame += dt / s.dt * state.speed;
+    if (state.loop && state.frame >= g.f1) { state.frame = g.f0; state.cam = null; }
+    else if (!state.loop) {
+      if (state.frame >= s.frames - 1) { state.frame = s.frames - 1; state.playing = false; syncPlay(); }
+      const cur = segAt(s.key, Math.floor(state.frame));
+      if (cur && cur !== state.seg) { const fr = state.frame; select(cur, false); state.frame = fr; }
+    }
+  }
+  drawField();
+  if (g && Math.floor(now / 100) !== Math.floor((now - dt * 1000) / 100)) drawTape();
+  requestAnimationFrame(tick);
+}
+
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) { state.playing = false; }
+setGroup('real', true);
+state.playing = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+syncPlay();
+addEventListener('resize', () => { state.cam = null; drawTape(); });
+requestAnimationFrame(tick);
+})();
+</script>

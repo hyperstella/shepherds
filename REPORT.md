@@ -407,6 +407,47 @@ for review), `results/label_phases.json` and `results/figures/label_phases.png`.
 - These are geometric proxies: the shepherd's commands were not recorded, so a label says where the
   dog was, not what it was asked to do.
 
+**Field layout (from the paper and the tracks).** The paper's Methods describe a flat 80 × 50 m
+pasture, a drive between two points A and B 60 m apart, verbal commands, and UWB tags localised
+at 2 Hz (the released data is at 10 Hz). No video, fences, markers or obstacles are recorded. In the
+tracks, every animal stays inside a 70 × 35 m area (x 3–74 m, y −14–21 m), and the flock turns
+around at about (14, −4) m and (65, 1) m, which is 51 m apart, so it probably turned short of A and B.
+The paper says the shepherd "remained motionless on one side of the field", but the shepherd's tag
+moves at a median 0.25 m/s during the hand-labelled drives and covers most of the field.
+`viz/build_phases.py` draws the area used and the two turnaround points in the phase replay.
+
+### Labelling other data and the models
+
+`phases.label_track` works on any `Track`: a (n, 2, T) position array, the sampling interval, the
+sheep rows, the dog row, and optionally a shepherd row and hand labels. Time windows are in
+seconds, so they carry over to other sampling rates. `Rules(away_from="edge")` measures "away"
+from the nearest sheep instead of the flock centre, for larger flocks. On the Jadhav sessions the
+refactored code gives the same 224 segments.
+
+`experiments/label_simulations.py` runs the labeller on the models doing the experiment's task:
+drive the flock between A = (0, 0) and B = (60, 0) and back for 10 minutes, switching target
+when the flock centre is within 5 m of it (16 runs each). Each run is simulated in 5 s chunks,
+shifted so its own target is at the origin. In a check without target switching, the chunked runs
+reach B about as often as runs simulated in one piece (56% and 63% within 120 s, 16 runs each).
+
+| | drive | turn | flank | idle | away | Trips per 10 min | 10 s heading change while moving (median / 90th pct) |
+|---|---|---|---|---|---|---|---|
+| Real collie (all tracked time) | 47% | 9% | 3% | 27% | 14% | — | 51° / 164° |
+| Published model | 100% | 0% | 0% | 0% | 0% | 4.7 | 13° / 52° |
+| Calibrated (M4τ) | 33% | 8% | 6% | 9% | 44% | 1.8 | 56° / 159° |
+
+- **The published model never turns sharply.** It completes 4.7 trips per 10 minutes, but each
+  reversal is a wide loop 10–20 m off the line, and the heading never changes by 120° within 10 s.
+  The real flock does that 5.4 times per 10 minutes. Its collie is also never beside the flock.
+- **The calibrated model turns like the real flock but loses the flock.** Its turn and flank
+  shares and its heading changes match the real ones. But 15 of 16 runs have spells where the
+  flock stalls and the dog ends up more than 15 m away (44% of the time), and it completes only
+  1.8 trips per 10 minutes. In the worst run the flock splits and the dog leaves with part of it.
+  The real collie is away 14% of the time, and in 89% of that the flock is standing still,
+  which looks like rests between trips. The simulations have no rests.
+- So the labels add a test that summary statistics missed: neither model reproduces the real
+  sequence of driving, sharp turns and short flanking.
+
 ## Phase 7 (feasibility): a second dataset
 
 A desk check of public sources; nothing was downloaded.
@@ -515,7 +556,7 @@ Priors are on weight shares, as in M2. Run `experiments/build_table.py --model M
   the data never require the dog's push. As a result, the calibrated flock **cannot be turned
   around**: in the viewer's back-and-forth task it completes 0.2–0.3 trips per 10 minutes, against
   5 for the published model. Identifying the dog response needs data where the dog changes the
-  flock's direction (collecting, turns at the posts) or a direct estimate from the tracks. The
+  flock's direction (collecting, the turnarounds at the target points) or a direct estimate from the tracks. The
   learned dog kernels (Phase 4) are such an estimate.
 
 **The viewer** (`viz/`, republished) now opens on the **Calibrated** preset (M3τ posterior medians
@@ -560,6 +601,39 @@ uses M3τ posterior draws, the measured collie, and dt = 0.2 s.
 - **Viewer:** the Calibrated preset is now M3τ plus the learned dog response (g = 2). The JS port
   matches Python with the term on (C 0.581 vs 0.584, P 0.742 vs 0.739). M3τ without it is kept for
   contrast.
+
+## Phase 3e: adding the learned attraction (M5τ)
+
+Phase 3d left one gap: random-neighbour attraction is too weak to hold the flock together. The
+learned pair kernel φ_E (Phase 4) repels below 1.25 m and attracts from there, growing to 6 m and
+fading out by 8 m. `model.Params.pair_kernel` adds a_i = Σ_j φ_E(r_ij) ê_ij to the heading rule in
+the same way as the dog kernel, with a gain g_pair, on top of M4τ (dog gain 2). It acts on sheep
+that see the dog, like the other social terms. Run `experiments/pair_attraction.py`.
+`experiments/dog_response.py` now exposes `context()` and `evaluate()` so both use the same scoring.
+
+| g_pair | Short-window error | Long drives: C | Drift | NND | E | Turn test | Back-and-forth trips / 10 min | Dog away |
+|---|---|---|---|---|---|---|---|---|
+| 0 (M4τ) | 0.78 | 1.44 m | 0.40 | 0.33 m | 0.67 | 75% | 1.75 | 44% |
+| 1 | 0.82 | 1.37 m | 0.42 | 0.33 m | 0.70 | 61% | 2.1 | 31% |
+| **2** | **0.82** | **1.05 m** | **0.10** | 0.30 m | 0.71 | 77% | **3.0** | **14%** |
+| 4 | 0.82 | 0.97 m | 0.10 | 0.30 m | 0.71 | 59% | 2.9 | 15% |
+| 8 | 0.81 | 0.86 m | 0.06 | 0.30 m | 0.76 | 69% | 3.6 | 6% |
+| Real flock | — | 1.13 m | 0.00 | 0.50 m | 1.02 | — | — | 14% (mostly rests) |
+
+- **g_pair = 2 fixes most of the cohesion gap.** Whole-drive cohesion goes from 1.44 to 1.05 m
+  (real 1.13), drift from 0.40 to 0.10, and back-and-forth trips from 1.75 to 3.0 per 10 minutes.
+  The dog is more than 15 m from the flock 14% of the time instead of 44%. Above 2 the flock gets
+  tighter than the real one. The gain is chosen on whole-drive cohesion and drift, which the term
+  is meant to fix, not on the task.
+- **Short windows get slightly worse** (0.78 → 0.82). The turn test, at 16 runs × 4, moves
+  between 59% and 80% without a trend, which is about its run-to-run noise.
+- **Still missing:**
+  - spacing and shape: nearest-neighbour distance is 0.30 m against 0.50 m, and elongation 0.71
+    against 1.02, at every gain;
+  - the turn away from a flanking dog (Fig 4a slope −0.31 against −0.77);
+  - reliability: 1 of 16 runs still completes no trip, and the published model does 4.7 trips.
+- The attraction only acts on sheep within the dog's notice radius (6.7 m), as in the published
+  model. A sheep left behind outside it still stands still.
 
 ## Feasibility: how many dogs, and what does cohesion change? (after Di Lorenzo et al., arXiv:2411.04791)
 
