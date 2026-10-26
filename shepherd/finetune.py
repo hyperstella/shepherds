@@ -25,8 +25,16 @@ def frame_name(video_stem, frame):
 
 
 def video_of(name):
-    """Video stem from an image or label file name."""
-    stem = Path(name).stem
+    """Video stem from a frame name, with or without its .jpg/.txt extension.
+
+    Only those extensions are stripped: video names such as "23.11.23-15" contain dots,
+    which Path.stem would treat as an extension.
+    """
+    stem = Path(name).name
+    for ext in (".jpg", ".jpeg", ".png", ".txt"):
+        if stem.lower().endswith(ext):
+            stem = stem[: -len(ext)]
+            break
     return stem.rsplit(SEP, 1)[0] if SEP in stem else stem
 
 

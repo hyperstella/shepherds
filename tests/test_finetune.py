@@ -77,3 +77,11 @@ def test_split_two_frames_and_counts(tmp_path):
     (tmp_path / "b.txt").write_text("0 0.5 0.5 0.1 0.1\n")
     assert FT.class_counts(tmp_path) == {"sheep": 2, "dog": 1, "person": 0}
     assert FT.class_counts(tmp_path, {"b"}) == {"sheep": 1, "dog": 0, "person": 0}
+
+
+def test_video_of_keeps_dots_in_video_names():
+    name = FT.frame_name("23.11.23-15", 807)
+    assert FT.video_of(name) == "23.11.23-15"
+    assert FT.video_of(f"images/{name}.jpg") == "23.11.23-15"
+    assert FT.video_of(f"{name}.txt") == "23.11.23-15"
+    assert FT.video_of("plain.jpg") == "plain"
