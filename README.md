@@ -9,6 +9,8 @@ prioritized list of improvements.
 
 ## Setup
 
+Requires Python 3.12 or newer. The pinned NumPy and SciPy do not install on older versions.
+
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
