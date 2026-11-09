@@ -194,7 +194,7 @@ def hand_drive_mask(session):
 
 
 def read_reviewed(path, session):
-    """Per-sample label indices from a reviewed CSV (draft_phases.csv or viz/labeler.html export).
+    """Per-sample label indices from a reviewed CSV such as draft_phases.csv.
 
     Uses `reviewed_label` where filled and `label` otherwise. Samples no row
     covers are -1. Times are in tracking seconds, as in draft_phases.csv. The
