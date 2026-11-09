@@ -115,7 +115,7 @@ Di Lorenzo 2026:
 
 | Preset | What it is | Label |
 |---|---|---|
-| `jadhav_reference` | `herding_model.m` with `simulation_hm.m` parameters, open plane, start 250 m out | reference (bitwise equal to `model.simulate`) |
+| `jadhav_reference` | `herding_model.m` with `simulation_hm.m` parameters, open plane, start 250 m out | reference (equal to `model.simulate` up to rounding) |
 | `jadhav_modified` | `herding_model_sim.m` (Supp. Sec. 3) | reference |
 | `dilorenzo_reference` | 2411.04791 §IV-A: torus 2π, 720 + 280, D = 0.01, L = π, k = 6/π, K_H = 10 | reference up to items 7, 9–11, 13 |
 | `dilorenzo_interacting` (page) | the 2024 setting plus the 2026 weak Morse kernel | 2D analogue of their 1D example |
@@ -156,7 +156,7 @@ Activation decides the new heading h_i⁺ and the step length s_i:
     x_i⁺ = x_i + s_i dt h_i⁺  [ + √(2 D dt) ξ_i,  ξ_i ~ N(0, I), only if D > 0: hybrid ]
 
 With one dog, `published`, D = 0 and `wander_speed` = 0 this consumes the same random numbers in
-the same order as `shepherd.model.simulate` and gives the same trajectories.
+the same order as `shepherd.model.simulate` and gives the same trajectories up to rounding.
 
 ### 2.2 First-order rule (`rule='first_order'`) [E, Di Lorenzo Eq. 1b with the 2026 pair term]
 
@@ -1003,7 +1003,7 @@ reproducible as the occupancy. Time averaging barely helps because the centroid 
 
 | Check | What it verifies |
 |---|---|
-| reference | the heading rule with Jadhav's parameters and one Strömbom dog reproduces `model.simulate` trajectories and modes (3 seeds, 370 steps, atol 1e-6; bitwise on most seeds) |
+| reference | the heading rule with Jadhav's parameters and one Strömbom dog reproduces `model.simulate` trajectories and modes (3 seeds, first 50 steps, atol 1e-6; later, a last-bit rounding difference that appears on some CPUs is amplified by the flock) |
 | activation | published: a sheep with no dog within r_dog and no neighbour within r_rep neither moves nor turns; wander: off by default, and when on every standing sheep walks at exactly `wander_speed`; contagion: only sheep within 3 m of the dog move on step 1 and motion spreads to sheep that never saw the dog |
 | noise | directional noise keeps every step at exactly v; Brownian noise changes step lengths; the first-order rule's mean square displacement is 4Dt |
 | periodic geometry | wrapped differences, circular-mean centroid across the seam, translation invariance of the dynamics and metrics under a shift across the seam, image sums converge to the periodic kernel and agree with the design grid |
