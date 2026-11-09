@@ -76,7 +76,7 @@ def diffusion(drives, fit, model, windows=(1.0, 2.0, 4.0)):
             pos = d.pos[: N + 1]
             if pos.shape[-1] <= h + 1:
                 continue
-            sm, vel = K.smooth_drive(pos)
+            sm, _ = K.smooth_drive(pos)
             x = np.moveaxis(sm, -1, 0)
             F = model.features(x[:, :N], None, x[:, N]) @ c  # (T, N, 2) drift
             drift = np.cumsum(F, axis=0) * data.DT
@@ -136,8 +136,6 @@ def target_density(grid, n_sheep, r_goal, coverage=0.95):
 
 def required_drift(grid, n_target, D, g=None):
     """v* = D grad ln n_T* - g * n_T*  (2, n, n)."""
-    s_sq = None
-    X, Y = grid.wrapped()
     # grad ln n for the Gaussian, computed numerically for generality
     ln = np.log(np.maximum(n_target, 1e-300))
     gx = (np.roll(ln, -1, 0) - np.roll(ln, 1, 0)) / (2 * grid.dx)

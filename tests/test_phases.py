@@ -73,7 +73,7 @@ def test_generic_track_without_shepherd():
     pos[:5, 0] = x + np.arange(5)[:, None] * 0.5
     pos[:5, 1] = np.arange(5)[:, None] * 0.5
     pos[5, 0], pos[5, 1] = x - 4.0, 1.0
-    lab, segs = PH.label_track(PH.Track("toy", pos, 1.0, 5, 5))
+    _, segs = PH.label_track(PH.Track("toy", pos, 1.0, 5, 5))
     names = [g.label for g in segs]
     assert names == ["drive", "idle"]
     assert segs[0].end_s == pytest.approx(31.0, abs=2)
