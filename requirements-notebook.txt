@@ -1,0 +1,3 @@
+# Optional: to open the notebooks in notebooks/. Not needed for the rest of the project or its tests.
+-r requirements.txt
+jupyterlab==4.6.6
