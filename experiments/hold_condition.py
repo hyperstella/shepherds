@@ -133,7 +133,6 @@ def hold(args):
     sel = slice(T0, None)
     om_s, V_s = om[:, sel], V[:, 1:][:, sel]
     sgn = np.sign(om_s)
-    hd = pos[..., 1:]  # headings are not stored; polarization from the displacement field instead
     out = dict(
         sheep=sheep, v_dog=v_dog, runs=R, steps=T, from_step=T0,
         rho_median=fl(np.median(rho[:, sel])), rho_mean=fl(rho[:, sel].mean()), rho_p10=fl(np.percentile(rho[:, sel], 10)), rho_p90=fl(np.percentile(rho[:, sel], 90)),

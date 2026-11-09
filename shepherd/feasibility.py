@@ -259,6 +259,70 @@ def micro_check(f, g, D, n_sheep, dog_density, grid, r_goal, n_dogs, t_end=200.0
 
 # ------------------------------------------------------------ local version (no periodic-box artifact)
 
+def goal_points(n_sheep, r_goal, coverage=0.95, eval_step=0.25):
+    """Evaluation points over the disc of radius 2 r_goal, their Gaussian weights, the goal density
+    n* (agents / m^2), the cell size and the goal's standard deviation s."""
+    s = r_goal / np.sqrt(-2 * np.log(1 - coverage))
+    R = 2.0 * r_goal
+    eval_step = max(eval_step, r_goal / 12)  # about 12 cells per goal radius keeps the pairwise term small
+    a = np.arange(-R, R + 1e-9, eval_step)
+    X, Y = np.meshgrid(a, a, indexing="ij")
+    keep = np.hypot(X, Y) <= R
+    P = np.stack([X[keep], Y[keep]], -1)
+    w = np.exp(-(P ** 2).sum(1) / (2 * s ** 2))
+    n_star = n_sheep * w / (2 * np.pi * s ** 2)
+    return P, w, n_star, eval_step, s
+
+
+def cohesion_drift(g, P, n_star, eval_step):
+    """(K_g * n*)(x) at the points P: the pull of the goal flock on a sheep at x (attraction g > 0)."""
+    d = P[None] - P[:, None]  # [i, j] = p_j - p_i
+    dist = np.linalg.norm(d, axis=-1)
+    np.fill_diagonal(dist, np.inf)
+    return ((g(dist) / dist * n_star[None] * eval_step ** 2)[..., None] * d).sum(1)
+
+
+def required_drift_local(g, D, n_sheep, r_goal, coverage=0.95, eval_step=0.25):
+    """Points, weights and the drift v* = D grad ln n* - K_g * n* the dogs must supply there."""
+    P, w, n_star, eval_step, s = goal_points(n_sheep, r_goal, coverage, eval_step)
+    v = -D * P / s ** 2  # D grad ln n*
+    if g is not None:
+        v = v - cohesion_drift(g, P, n_star, eval_step)
+    return P, w, v
+
+
+def ring_field(f, P, radius, n_angles=72):
+    """Drift at P from one dog's worth of mass spread evenly round a ring centred on the goal."""
+    th = np.linspace(0, 2 * np.pi, n_angles, endpoint=False)
+    C = radius * np.stack([np.cos(th), np.sin(th)], -1)
+    rd = P[:, None] - C[None]
+    dd = np.maximum(np.linalg.norm(rd, axis=-1), 1e-6)
+    return ((f(dd) / dd)[..., None] * rd).mean(1)
+
+
+def single_rings(f, g, D, n_sheep, r_goal, radii, coverage=0.95, eval_step=0.25):
+    """For each ring radius, the least-squares dog mass on that ring and its relative drift error.
+
+    Comparing designs at the same radius separates what the required drift asks of the dogs from
+    where a solver happens to put them.
+    """
+    P, w, v = required_drift_local(g, D, n_sheep, r_goal, coverage, eval_step)
+    out = []
+    for r in radii:
+        F = ring_field(f, P, r)
+        m = max(0.0, float((w[:, None] * F * v).sum() / (w[:, None] * F * F).sum()))
+        err = float(np.sqrt((w[:, None] * (m * F - v) ** 2).sum() / (w[:, None] * v ** 2).sum()))
+        out.append({"radius": float(r), "mass": m, "drift_error": err})
+    return out
+
+
+def centroid_stiffness(P, w, u, s):
+    """Rate (1/s) at which the drift u (at points P, Gaussian goal weights w, sd s) pulls a rigidly
+    displaced flock back: -1/2 <div u> under the goal density, which for a Gaussian equals
+    -<x . u> / (2 s^2) (integration by parts), so no derivatives are needed. D grad ln n* gives D/s^2."""
+    return float(-np.average((P * u).sum(1), weights=w) / (2 * s ** 2))
+
+
 def minimum_dogs_local(f, g, D, n_sheep, r_goal, coverage=0.95, ring_step=0.5, n_angles=36, ring_max=None,
                        eval_step=0.25):
     """Minimum dogs as a non-negative least-squares problem on an open plane.
@@ -270,21 +334,7 @@ def minimum_dogs_local(f, g, D, n_sheep, r_goal, coverage=0.95, ring_step=0.5, n
     """
     from scipy.optimize import nnls
 
-    s = r_goal / np.sqrt(-2 * np.log(1 - coverage))
-    R = 2.0 * r_goal
-    eval_step = max(eval_step, r_goal / 12)  # about 12 cells per goal radius keeps the pairwise term small
-    a = np.arange(-R, R + 1e-9, eval_step)
-    X, Y = np.meshgrid(a, a, indexing="ij")
-    keep = np.hypot(X, Y) <= R
-    P = np.stack([X[keep], Y[keep]], -1)
-    w = np.exp(-(P ** 2).sum(1) / (2 * s ** 2))
-    n_star = n_sheep * w / (2 * np.pi * s ** 2)  # agents / m^2
-    v = -D * P / s ** 2  # D grad ln n*
-    if g is not None:
-        d = P[None] - P[:, None]  # [i, j] = p_j - p_i
-        dist = np.linalg.norm(d, axis=-1)
-        np.fill_diagonal(dist, np.inf)
-        v = v - ((g(dist) / dist * n_star[None] * eval_step ** 2)[..., None] * d).sum(1)
+    P, w, v = required_drift_local(g, D, n_sheep, r_goal, coverage, eval_step)
     ring_max = ring_max or (r_goal + 12.0)
     radii = np.arange(r_goal + ring_step, ring_max + 1e-9, ring_step)
     th = np.linspace(0, 2 * np.pi, n_angles, endpoint=False)

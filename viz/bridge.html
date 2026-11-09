@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jadhav ↔ Di Lorenzo bridge</title>
+<style>
+  :root { --bg:#fbfaf7; --panel:#fff; --ink:#1d1d1b; --mute:#6b6b66; --line:#dedbd3; --acc:#b4452c; --blue:#2b5e9c; --green:#2f7d4f; --amber:#c98a1a; --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; --mono:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 var(--f); }
+  header { padding:14px 20px 8px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { margin:0 0 4px; font-size:19px; }
+  header p { margin:0; color:var(--mute); max-width:1100px; }
+  .badges { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .badge { font:12px/1.3 var(--mono); padding:3px 8px; border-radius:6px; border:1px solid var(--line); background:#f3f1ea; }
+  .badge.ref { border-color:var(--green); color:var(--green); }
+  .badge.adapt { border-color:var(--amber); color:var(--amber); }
+  .badge.hyb { border-color:var(--acc); color:var(--acc); }
+  main { display:grid; grid-template-columns: minmax(420px, 1fr) 380px; gap:14px; padding:14px 20px; max-width:1500px; }
+  .stage { display:flex; flex-direction:column; gap:12px; min-width:0; }
+  canvas.field { width:100%; aspect-ratio:1; background:#fff; border:1px solid var(--line); border-radius:8px; }
+  .charts { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
+  .chart { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 8px 4px; }
+  .chart h4 { margin:0 0 2px; font-size:12px; color:var(--mute); font-weight:600; }
+  .chart canvas { width:100%; height:120px; display:block; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .panel h3 { margin:0 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--mute); }
+  aside { display:flex; flex-direction:column; gap:10px; max-height:calc(100vh - 120px); overflow:auto; position:sticky; top:10px; }
+  .row { display:grid; grid-template-columns: 118px 1fr 58px; gap:6px; align-items:center; margin:3px 0; }
+  .row label { font-size:12px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row input[type=range] { width:100%; margin:0; }
+  .row .val { font:12px var(--mono); text-align:right; color:var(--mute); }
+  .row input[type=number] { width:100%; font:12px var(--mono); padding:2px 4px; border:1px solid var(--line); border-radius:4px; }
+  .seg { display:flex; gap:4px; flex-wrap:wrap; margin:4px 0 6px; }
+  .seg button { font:12px var(--f); padding:4px 8px; border:1px solid var(--line); border-radius:6px; background:#f7f5ef; cursor:pointer; }
+  .seg button[aria-pressed=true] { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .presets button { text-align:left; width:100%; margin:2px 0; }
+  .note { font-size:12px; color:var(--mute); margin:4px 0 2px; }
+  .kv { font:12px var(--mono); display:grid; grid-template-columns: auto 1fr; gap:2px 10px; }
+  .kv b { font-weight:600; }
+  .ok { color:var(--green); } .bad { color:var(--acc); }
+  .run { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .run button { font:13px var(--f); padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:#f7f5ef; cursor:pointer; }
+  .run button.primary { background:var(--acc); color:#fff; border-color:var(--acc); }
+  details summary { cursor:pointer; font-size:12px; color:var(--mute); }
+  .sub { margin-left:4px; padding-left:8px; border-left:2px solid var(--line); }
+  .tag { display:inline-block; font:10px/1.2 var(--mono); padding:1px 5px; border-radius:4px; margin-left:4px; vertical-align:middle; }
+  .tag.ext { background:#fbe9c7; color:#7a5200; } .tag.hyb { background:#f8d9d1; color:#7a2a17; } .tag.adp { background:#e1ecf9; color:#1d4a80; }
+  .legend { display:flex; gap:14px; font-size:12px; color:var(--mute); flex-wrap:wrap; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { max-height:none; position:static; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Jadhav ↔ Di Lorenzo: one density objective, two follower rules, two controllers</h1>
+  <p>How do sheep–sheep interactions, movement rules and herder resources change the flock density that can be reached?
+     Followers, controller and objective are separate choices; anything that is not a paper's own configuration is labelled.
+     The Python reference is <code>shepherd/bridge.py</code> (this page is its port, <code>viz/bridge_sim.js</code>); the equations and mappings are in <code>docs/bridge_simulation.md</code>.</p>
+  <div class="badges" id="badges"></div>
+</header>
+<main>
+  <section class="stage">
+    <canvas class="field" id="field" width="760" height="760"></canvas>
+    <div class="legend">
+      <span><i style="background:#e0781e"></i>sheep that see a dog / are pushed</span><span><i style="background:#9a9a94"></i>sheep standing or beyond range</span>
+      <span><i style="background:#1f3d7a"></i>dogs</span><span><i style="background:#c7d7ea;border:1px solid #2b5e9c"></i>target density ρ̄ (shaded), r_goal (circle)</span>
+      <span id="legend-design"><i style="background:#f4c2b5"></i>designed herder density ρ̄_H (Di Lorenzo)</span>
+    </div>
+    <div class="charts">
+      <div class="chart"><h4>Relative L² density error ‖ρ̂_b − ρ̄_b‖² / ‖ρ̄_b‖² (log); dashed: finite-N floor</h4><canvas id="c-err"></canvas></div>
+      <div class="chart"><h4>Target occupancy: share of sheep within r_goal</h4><canvas id="c-occ"></canvas></div>
+      <div class="chart"><h4>Cohesion: mean distance to the (circular-mean) centroid</h4><canvas id="c-coh"></canvas></div>
+      <div class="chart"><h4>Centroid error |G − goal|, and share of sheep seeing a dog (grey)</h4><canvas id="c-cen"></canvas></div>
+    </div>
+    <div class="panel" id="feas-panel">
+      <h3>Herder resources: Di Lorenzo's minimum herder mass</h3>
+      <div id="feas"></div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <h3>Run</h3>
+      <div class="run">
+        <button class="primary" id="play">Play</button><button id="step1">Step</button><button id="reset">Reset</button>
+        <span class="val" id="time" style="font:12px var(--mono);color:var(--mute)"></span>
+      </div>
+      <div class="run" style="margin-top:6px">
+        <button id="ff60" title="Run 60 simulated seconds as fast as the computer allows, drawing only between chunks">+60 s</button><button id="ffend" title="Run to the preset's end time as fast as possible (click again to stop)">To end</button>
+        <span class="note" id="ff-status" style="margin:0"></span>
+      </div>
+      <div class="row"><label>seed</label><input type="number" id="seed" value="1" step="1"><span class="val"></span></div>
+      <div class="row"><label>steps per frame</label><input type="range" id="spf" min="1" max="200" step="1" value="1"><span class="val" id="spf-v">1</span></div>
+      <div class="row"><label>start</label><div class="seg" id="init-seg" style="margin:0"></div><span class="val"></span></div>
+      <div class="row"><label>start distance / spread (m)</label><input type="number" id="box_length" value="60" step="5"><span class="val"></span></div>
+      <div class="row"><label><input type="checkbox" id="show-design" checked> show ρ̄_H</label><label title="On the open plane the view refits when the flock or dogs spread out or come back in, which changes the on-screen size of everything, the r_goal circle included. Lock it to keep one scale; it refits once when a preset loads. Periodic boxes always show the whole box."><input type="checkbox" id="lock-zoom"> lock zoom</label><span></span></div>
+    </div>
+
+    <div class="panel presets">
+      <h3>Presets (each sets every component at once)</h3>
+      <div id="presets"></div>
+      <div class="note" id="preset-note"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Convenience slider (heading rule only)</h3>
+      <div class="row"><label>Jadhav-like ↔ no social terms</label><input type="range" id="lambda" min="0" max="1" step="0.01" value="0"><span class="val" id="lambda-v">0.00</span></div>
+      <div class="note" id="lambda-note"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Followers (sheep)</h3>
+      <div class="seg" id="rule-seg"></div>
+      <div id="F-controls"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Herders (dogs) and controller</h3>
+      <div class="seg" id="ctrl-seg"></div>
+      <div id="H-controls"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Objective (target density)</h3>
+      <div class="seg" id="target-seg"></div>
+      <div id="T-controls"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Domain</h3>
+      <div id="D-controls"></div>
+    </div>
+  </aside>
+</main>
+
+<script src="bridge_sim.js"></script>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const B = Bridge;
+
+  // ---------------------------------------------------------------- state
+  const state = {
+    cfg: JSON.parse(JSON.stringify(B.PRESETS.jadhav_reference.cfg)),
+    run: { init: "jadhav", box_length: 60 },
+    seed: 1, spf: 1, playing: false, sim: null, hist: [], lambda: 0, preset: "jadhav_reference",
+    design: null, view: null,
+  };
+  // the page starts the published model 60 m out (not 250) so the drive is visible at once
+  state.cfg.followers = Object.assign({}, B.FOLLOWERS, state.cfg.followers);
+  state.cfg.herders = Object.assign({}, B.HERDERS, state.cfg.herders);
+  state.cfg.target = Object.assign({}, B.TARGET, state.cfg.target);
+  state.cfg.domain = Object.assign({}, B.DOMAIN, state.cfg.domain);
+
+  // ---------------------------------------------------------------- control definitions
+  // [field, label, min, max, step, {when: predicate, tag}]
+  const isH = (c) => c.followers.rule === "heading", isFO = (c) => c.followers.rule === "first_order";
+  const F_CTRL = [
+    ["n", "sheep N", 2, 400, 1],
+    ["dt", "dt (s)", 0.01, 1, 0.01],
+    ["v", "speed v (m/s)", 0.1, 3, 0.05, { when: isH }],
+    ["w_inertia", "heading persistence w_inertia", 0, 3, 0.05, { when: isH }],
+    ["w_rep", "repulsion w_rep", 0, 5, 0.1, { when: isH }],
+    ["w_att", "attraction w_att", 0, 5, 0.1, { when: isH }],
+    ["w_ali", "alignment w_ali", 0, 5, 0.1, { when: isH }],
+    ["w_dog", "dog term w_dog", 0, 5, 0.1, { when: isH }],
+    ["e_noise", "directional noise e", 0, 2, 0.05, { when: isH }],
+    ["r_rep", "repulsion radius r_rep (m)", 0.1, 6, 0.1, { when: isH }],
+    ["r_dog", "dog notice radius r_dog (m)", 1, 40, 0.5, { when: isH }],
+    ["k_perceive", "neighbours perceived K", 1, 30, 1, { when: isH }],
+    ["n_att", "of which attract n_att", 1, 30, 1, { when: isH }],
+    ["n_ali", "of which align n_ali", 1, 10, 1, { when: isH }],
+    ["wander_speed", "wander speed (standing sheep)", 0, 1, 0.05, { when: (c) => isH(c) && c.followers.activation === "published", tag: "ext" }],
+    ["a_dog", "dog push amplitude a", 0, 5, 0.05, { when: isFO }],
+    ["L_dog", "dog push range L", 0.1, 40, 0.1, { when: isFO }],
+    ["g_rep", "pair repulsion g_rep", 0, 5, 0.05, { when: isFO }],
+    ["l_rep", "repulsion range l_rep", 0.05, 10, 0.05, { when: isFO }],
+    ["g_att", "pair attraction g_att", 0, 5, 0.05, { when: isFO }],
+    ["l_att", "attraction range l_att", 0.05, 20, 0.05, { when: isFO }],
+    ["ali_fo", "alignment drift (first-order)", 0, 2, 0.05, { when: isFO, tag: "ext" }],
+    ["r_ali", "alignment radius r_ali", 0.1, 20, 0.1, { when: (c) => isFO(c) && c.followers.ali_fo > 0, tag: "ext" }],
+    ["D", "positional diffusion D", 0, 1, 0.005, { tag: (c) => isH(c) ? "hyb" : null }],
+  ];
+  const H_CTRL = [
+    ["n", "dogs N_H", 0, 5000, 1, { when: (c) => c.herders.controller !== "none", input: "number" }],
+    ["v", "dog speed (m/s)", 0.1, 10, 0.1, { when: (c) => ["strombom", "dilorenzo"].includes(c.herders.controller) }],
+    ["spread_angle", "drive-point fan (rad)", 0, 1.5, 0.05, { when: (c) => c.herders.controller === "strombom" && c.herders.n > 1, tag: "adp" }],
+    ["slow_step", "creep step near sheep", 0, 1, 0.01, { when: (c) => c.herders.controller === "strombom" }],
+    ["K_H", "herder gain K_H", 0.1, 50, 0.1, { when: (c) => c.herders.controller === "dilorenzo" }],
+    ["bandwidth", "KDE bandwidth", 0.05, 20, 0.05, { when: (c) => c.herders.controller === "dilorenzo" }],
+    ["substeps", "herder flow sub-steps per step (fewer = faster)", 1, 100, 1, { when: (c) => c.herders.controller === "dilorenzo" }],
+    ["ring_radius", "ring radius (m)", 1, 60, 0.5, { when: (c) => c.herders.controller === "static_ring" }],
+    ["fb_standoff", "standoff beyond surplus sheep (m)", 0.5, 30, 0.5, { when: (c) => c.herders.controller === "density_feedback" }],
+    ["fb_exclusion", "min. spacing of targeted sheep (m)", 0.5, 40, 0.5, { when: (c) => c.herders.controller === "density_feedback" }],
+    ["fb_drive_radius", "drive when centroid farther than (m)", 0.5, 40, 0.5, { when: (c) => c.herders.controller === "density_feedback" }],
+    ["fb_threshold", "surplus threshold (× target peak)", 0, 2, 0.05, { when: (c) => c.herders.controller === "density_feedback" }],
+  ];
+  const T_CTRL = [
+    ["sigma", "target sd σ (m)", 0.3, 20, 0.1, { when: (c) => c.target.kind === "gaussian" }],
+    ["k", "von Mises concentration k", 0.1, 10, 0.05, { when: (c) => c.target.kind === "vonmises" }],
+    ["bandwidth", "error KDE bandwidth b", 0.05, 10, 0.05],
+  ];
+  const D_CTRL = [
+    ["size", "box side (m)", 2, 400, 0.5, { when: (c) => c.domain.periodic }],
+    ["images", "kernel periodic images", 0, 3, 1, { when: (c) => c.domain.periodic && isFO(c) }],
+  ];
+
+  function buildRows(host, group, defs) {
+    host.innerHTML = "";
+    const cfg = state.cfg[group];
+    for (const [f, label, min, max, stp, opt = {}] of defs) {
+      if (opt.when && !opt.when(state.cfg)) continue;
+      const row = document.createElement("div"); row.className = "row";
+      const tag = typeof opt.tag === "function" ? opt.tag(state.cfg) : opt.tag;
+      const tagHtml = tag ? `<span class="tag ${tag}">${{ ext: "extension", hyb: "hybrid", adp: "adaptation" }[tag]}</span>` : "";
+      let v = cfg[f];
+      if (opt.input === "number") {  // whole numbers typed in, applied on Enter or leaving the box
+        row.innerHTML = `<label title="${f}">${label}${tagHtml}</label><input type="number" min="${min}" max="${max}" step="${stp}" value="${v}" style="width:6em"><span class="val"></span>`;
+        const inp = row.querySelector("input");
+        inp.addEventListener("change", () => {
+          const n = Math.round(parseFloat(inp.value));
+          if (!isFinite(n)) { inp.value = cfg[f]; return; }
+          cfg[f] = Math.min(Math.max(n, min), max); inp.value = cfg[f]; onParam(group, f);
+        });
+        host.appendChild(row);
+        continue;
+      }
+      const inf = f === "v" && group === "herders" && !isFinite(v);
+      const top = inf ? max : Math.max(max, v);
+      row.innerHTML = `<label title="${f}">${label}${tagHtml}</label><input type="range" min="${min}" max="${top}" step="${stp}" value="${inf ? max : v}"><span class="val">${inf ? "∞" : fmt(v)}</span>`;
+      const inp = row.querySelector("input");
+      inp.addEventListener("input", () => { cfg[f] = parseFloat(inp.value); row.querySelector(".val").textContent = fmt(cfg[f]); onParam(group, f); });
+      host.appendChild(row);
+    }
+    // group-specific extras
+    if (group === "followers" && isH(state.cfg)) {
+      const seg = segment(["published", "contagion", "always"], cfg.activation, (v) => { cfg.activation = v; rebuild(); reset(); },
+        { published: "published rule", contagion: "contagion (Supp. 3)", always: "always social (adaptation)" });
+      const lab = document.createElement("div"); lab.className = "note"; lab.textContent = "Activation: which sheep step at all";
+      host.prepend(seg); host.prepend(lab);
+    }
+    if (group === "followers" && isFO(state.cfg)) {
+      host.appendChild(checkbox("population_scaling", "scale drift by 1/(N+N_H) (their α)", cfg, () => { rebuild(); reset(); }));
+    }
+    if (group === "herders" && cfg.controller === "dilorenzo") {
+      const row = document.createElement("div"); row.className = "row";
+      row.innerHTML = `<button id="dl-count" style="grid-column:1/4" title="The smallest N_H whose herder mass covers the minimum mass M̂ of Di Lorenzo's design (2024 Eqs. 11–12; searched when a pair kernel makes M̂ depend on N_H). Checked with the design the simulation runs.">Set N_H to Di Lorenzo's count</button>`;
+      row.querySelector("button").addEventListener("click", () => {
+        const r = B.dilorenzoCount(state.cfg);
+        if (r.n == null) { state.countNote = `<span class="bad">${r.reason}</span>`; buildRows($("#H-controls"), "herders", H_CTRL); return; }
+        const was = cfg.n, N = state.cfg.followers.n, { F } = B.resolve(state.cfg);
+        cfg.n = r.n;
+        const m = r.scaled ? `M̂ = ${r.mass_needed.toFixed(3)} of the total mass; ${r.n} herders give ${r.mass_available.toFixed(3)}` : `M̂ = ${r.mass_needed.toFixed(2)} herders`;
+        let note = `N_H ${was} → <b>${r.n}</b>: the smallest count that makes the design feasible for ${N} followers (${m}).`;
+        if (r.own_model && F.rule === "heading") note += " The count is for Di Lorenzo's own follower model, not for these sheep: Jadhav's sheep reach r* with a third of it (docs §4.5).";
+        else if (F.rule === "heading") note += " The design assumes a push these sheep lack, so the count is the design's, not the sheep's.";
+        state.countNote = note;
+        rebuild(); reset();
+      });
+      host.appendChild(row);
+      if (state.countNote) { const n = document.createElement("div"); n.className = "note"; n.id = "dl-count-note"; n.innerHTML = state.countNote; host.appendChild(n); }
+      host.appendChild(checkbox("_vinf", "no speed cap (as in the paper)", { _vinf: !isFinite(cfg.v) }, (o) => { cfg.v = o._vinf ? Infinity : 1.5; rebuild(); reset(); }));
+    }
+    if (group === "herders" && cfg.controller === "density_feedback") {
+      const on = cfg.fb_release != null;
+      host.appendChild(checkbox("_rel", "withdraw when the L² error is below a threshold (release)", { _rel: on }, (o) => { cfg.fb_release = o._rel ? 1.0 : null; rebuild(); reset(); }));
+      if (on) {
+        const row = document.createElement("div"); row.className = "row";
+        row.innerHTML = `<label>release below error</label><input type="range" min="0.05" max="3" step="0.05" value="${cfg.fb_release}"><span class="val">${fmt(cfg.fb_release)}</span>`;
+        row.querySelector("input").addEventListener("input", (e) => { cfg.fb_release = parseFloat(e.target.value); row.querySelector(".val").textContent = fmt(cfg.fb_release); reset(); });
+        host.appendChild(row);
+      }
+      const n = document.createElement("div"); n.className = "note";
+      n.textContent = "Heuristic, from neither paper: each dog stands beyond the sheep with the largest kernel-density surplus ρ̂_b − ρ̄_b, on the ray from the goal, and pushes it inward; Strömbom's drive geometry when the centroid is far. It controls the per-sheep surplus; it is feedback in the sheep, not a density design.";
+      host.appendChild(n);
+    }
+    if (group === "herders" && cfg.controller === "strombom") {
+      const on = cfg.hold_radius != null;
+      host.appendChild(checkbox("_hold", "reach-and-release hold (extension)", { _hold: on }, (o) => { cfg.hold_radius = o._hold ? 6.0 : null; rebuild(); reset(); }));
+      if (on) {
+        const row = document.createElement("div"); row.className = "row";
+        row.innerHTML = `<label>hold radius (m)<span class="tag ext">extension</span></label><input type="range" min="1" max="30" step="0.5" value="${cfg.hold_radius}"><span class="val">${fmt(cfg.hold_radius)}</span>`;
+        row.querySelector("input").addEventListener("input", (e) => { cfg.hold_radius = parseFloat(e.target.value); row.querySelector(".val").textContent = fmt(cfg.hold_radius); reset(); });
+        host.appendChild(row);
+      }
+    }
+    if (group === "target") {
+      host.appendChild(checkbox("_rauto", "r_goal from σ (95%) / r* = side/4", { _rauto: cfg.r_goal == null }, (o) => { cfg.r_goal = o._rauto ? null : B.resolve(state.cfg).T.r_goal; rebuild(); reset(); }));
+      if (cfg.r_goal != null) {
+        const row = document.createElement("div"); row.className = "row";
+        row.innerHTML = `<label>occupancy radius r_goal</label><input type="range" min="0.2" max="40" step="0.1" value="${cfg.r_goal}"><span class="val">${fmt(cfg.r_goal)}</span>`;
+        row.querySelector("input").addEventListener("input", (e) => { cfg.r_goal = parseFloat(e.target.value); row.querySelector(".val").textContent = fmt(cfg.r_goal); reset(); });
+        host.appendChild(row);
+      }
+    }
+    if (group === "domain") {
+      host.prepend(checkbox("periodic", "periodic square (wrapped distances, circular-mean centroid)", cfg, () => {
+        if (!cfg.periodic && state.cfg.herders.controller === "dilorenzo") state.cfg.herders.controller = "strombom";
+        if (!cfg.periodic && state.cfg.target.kind === "vonmises") state.cfg.target.kind = "gaussian";
+        if (cfg.periodic && state.run.init === "jadhav") state.run.init = "uniform";
+        rebuild(); reset();
+      }));
+    }
+  }
+  function checkbox(field, label, obj, cb) {
+    const row = document.createElement("div"); row.className = "row";
+    row.innerHTML = `<label style="grid-column:1/4"><input type="checkbox" ${obj[field] ? "checked" : ""}> ${label}</label>`;
+    row.querySelector("input").addEventListener("change", (e) => { obj[field] = e.target.checked; cb(obj); });
+    return row;
+  }
+  function segment(opts, current, cb, labels = {}) {
+    const seg = document.createElement("div"); seg.className = "seg";
+    for (const o of opts) {
+      const b = document.createElement("button"); b.textContent = labels[o] || o; b.setAttribute("aria-pressed", o === current);
+      b.addEventListener("click", () => cb(o)); seg.appendChild(b);
+    }
+    return seg;
+  }
+  const fmt = (v) => (v == null ? "—" : !isFinite(v) ? "∞" : Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(Math.abs(v) < 1 ? 3 : 2));
+
+  function onParam(group, f) {
+    state.countNote = null; const cn = document.getElementById("dl-count-note"); if (cn) cn.remove();  // the count note describes the old settings
+    // structural fields need a rebuild; everything else applies live where safe
+    const structural = (group === "followers" && ["n", "dt", "k_perceive", "n_att", "n_ali", "ali_fo"].includes(f))
+      || (group === "herders" && ["n", "grid", "bandwidth", "K_H"].includes(f)) || group === "target" || group === "domain"
+      || (group === "followers" && ["D", "a_dog", "L_dog", "g_rep", "l_rep", "g_att", "l_att"].includes(f) && state.cfg.herders.controller === "dilorenzo");
+    if (group === "herders" && f === "n") rebuild();
+    if (structural) reset(); else if (state.sim) { Object.assign(state.sim[group === "followers" ? "F" : group === "herders" ? "H" : "T"], B.resolve(state.cfg)[group === "followers" ? "F" : group === "herders" ? "H" : "T"]); }
+    if (group === "followers" && ["w_att", "w_ali", "w_inertia", "e_noise", "D"].includes(f)) { state.lambda = null; $("#lambda-v").textContent = "—"; }
+    badges();
+  }
+
+  function rebuild() {
+    const c = state.cfg;
+    $("#rule-seg").replaceWith(Object.assign(segment(["heading", "first_order"], c.followers.rule, (v) => {
+      c.followers.rule = v;
+      if (v === "first_order" && c.followers.D === 0) c.followers.D = c.domain.periodic && c.domain.size < 10 ? 0.01 : 0.12;
+      if (v === "first_order" && c.followers.dt === 1 && !c.domain.periodic) c.followers.dt = 0.1;
+      rebuild(); reset();
+    }, { heading: "heading rule (Jadhav/Strömbom)", first_order: "first-order (Di Lorenzo)" }), { id: "rule-seg" }));
+    const ctrls = c.domain.periodic ? ["strombom", "dilorenzo", "density_feedback", "static_ring", "none"] : ["strombom", "density_feedback", "static_ring", "none"];
+    $("#ctrl-seg").replaceWith(Object.assign(segment(ctrls, c.herders.controller, (v) => { c.herders.controller = v; if (v !== "none" && c.herders.n === 0) c.herders.n = 1; rebuild(); reset(); },
+      { strombom: "Strömbom/Jadhav dog", dilorenzo: "Di Lorenzo feedforward", density_feedback: "density feedback (heuristic)", static_ring: "static ring (heuristic)", none: "no dogs" }), { id: "ctrl-seg" }));
+    const kinds = c.domain.periodic ? ["gaussian", "vonmises"] : ["gaussian"];
+    $("#target-seg").replaceWith(Object.assign(segment(kinds, c.target.kind, (v) => { c.target.kind = v; rebuild(); reset(); },
+      { gaussian: "Gaussian", vonmises: "von Mises product (torus)" }), { id: "target-seg" }));
+    buildRows($("#F-controls"), "followers", F_CTRL);
+    buildRows($("#H-controls"), "herders", H_CTRL);
+    buildRows($("#T-controls"), "target", T_CTRL);
+    buildRows($("#D-controls"), "domain", D_CTRL);
+    const inits = c.domain.periodic ? ["uniform", "spread"] : ["jadhav", "spread"];
+    if (!inits.includes(state.run.init)) state.run.init = inits[0];
+    $("#init-seg").replaceWith(Object.assign(segment(inits, state.run.init, (v) => { state.run.init = v; rebuild(); reset(); },
+      { jadhav: "published", uniform: "uniform", spread: "around goal" }), { id: "init-seg", style: "margin:0" }));
+    $("#lambda").disabled = !isH(c);
+    $("#lambda-note").innerHTML = `λ changes only <code>${Object.keys(B.SLIDER_FIELDS).join(", ")}</code> of the heading rule, linearly from Jadhav's values to no attraction, alignment, persistence or directional noise plus Brownian jitter D = 0.12 m²/s. It never changes the update rule, activation, dog response or domain, so λ = 1 is not Di Lorenzo's follower: that needs the first-order rule (preset).`
+      + (isH(c) ? "" : " <b>Inactive: the first-order rule is selected.</b>");
+    badges();
+  }
+
+  // ---------------------------------------------------------------- provenance badges
+  function badges() {
+    const { F, H, T, D } = B.resolve(state.cfg);
+    const out = [];
+    const ref = B.resolve(B.PRESETS.jadhav_reference.cfg).F, mod = B.resolve(B.PRESETS.jadhav_modified.cfg).F;
+    const same = (a, b, keys) => keys.every((k) => a[k] === b[k]);
+    const social = ["w_inertia", "w_rep", "w_att", "w_ali", "w_dog", "e_noise", "r_rep", "r_dog", "k_perceive", "n_att", "n_ali", "v", "dt", "activation", "wander_speed", "D"];
+    if (F.rule === "heading") {
+      if (same(F, ref, social)) out.push(["ref", "followers: Jadhav published rule (reference)"]);
+      else if (same(F, mod, social)) out.push(["ref", "followers: Jadhav modified rule, Supp. 3 (reference)"]);
+      else {
+        const flags = [];
+        if (F.activation === "always") flags.push("activation=always (adaptation)");
+        if (F.activation === "contagion") flags.push("contagion activation");
+        if (F.wander_speed > 0) flags.push("wander (extension)");
+        if (F.D > 0) flags.push("Brownian D (hybrid)");
+        const w = social.filter((k) => !["activation", "wander_speed", "D"].includes(k) && F[k] !== ref[k]);
+        if (w.length) flags.push("changed: " + w.join(", "));
+        out.push([F.D > 0 ? "hyb" : "adapt", "followers: heading rule, " + flags.join("; ")]);
+      }
+    } else {
+      const flags = [];
+      if (!F.population_scaling) flags.push("kernels in m/s (no α)");
+      if (F.g_rep || F.g_att) flags.push("Morse pair kernel (2026)");
+      if (F.ali_fo > 0) flags.push("alignment (extension)");
+      if (!D.periodic) flags.push("open plane (their domain is periodic)");
+      out.push([flags.some((f) => /extension|plane|m\/s/.test(f)) ? "adapt" : "ref", "followers: first-order Di Lorenzo rule" + (flags.length ? ", " + flags.join("; ") : "")]);
+    }
+    if (H.controller === "strombom") {
+      let s = H.n === 1 ? "controller: Strömbom/Jadhav dog (published)" : `controller: ${H.n}-dog Strömbom fan (adaptation)`;
+      if (H.hold_radius != null) s += " + reach-and-release hold (extension)";
+      out.push([H.n === 1 && H.hold_radius == null ? "ref" : "adapt", s]);
+    } else if (H.controller === "dilorenzo") {
+      let s = "controller: Di Lorenzo feedforward design + Theorem-1 herder flow";
+      if (isFinite(H.v)) s += ` (speed cap ${H.v}: adaptation)`;
+      if (H.design_model && F.rule === "heading") s += ` — designed from Di Lorenzo's own follower model (push e^(−r/${fmt(H.design_model.L_dog)}), D = ${fmt(H.design_model.D)}${H.design_model.D === 0 ? ": flat design, control" : ""}); only the followers are swapped`;
+      else if (F.rule === "heading") s += " — design assumes a first-order push these sheep lack (hybrid)";
+      if (H.substeps > 1) s += `; flow in ${H.substeps} sub-steps per step`;
+      out.push([F.rule === "heading" ? "hyb" : isFinite(H.v) ? "adapt" : "ref", s]);
+    } else if (H.controller === "density_feedback") out.push(["adapt", `controller: ${H.n} density-feedback dog(s), surplus-pushing heuristic${H.fb_release != null ? " with release" : ""} (not from either paper)`]);
+    else if (H.controller === "static_ring") out.push(["adapt", `controller: ${H.n} static dogs on a ring (heuristic, no sensing)`]);
+    else out.push(["adapt", "controller: none (null model)"]);
+    out.push(["ref", `objective: ${T.kind === "gaussian" ? `Gaussian σ = ${fmt(T.sigma)}` : `von Mises k = ${fmt(T.k)}`}, r_goal = ${fmt(T.r_goal)}, error bandwidth b = ${fmt(T.bandwidth)}`]);
+    out.push(["ref", D.periodic ? `domain: periodic square, side ${fmt(D.size)}, kernel images ${D.images}` : "domain: open plane"]);
+    $("#badges").innerHTML = out.map(([k, s]) => `<span class="badge ${k}">${s}</span>`).join("");
+  }
+
+  // ---------------------------------------------------------------- presets and slider
+  for (const [key, p] of Object.entries(B.PRESETS)) {
+    const b = document.createElement("button"); b.textContent = p.label; b.dataset.key = key;
+    b.addEventListener("click", () => applyPreset(key));
+    $("#presets").appendChild(b);
+  }
+  function applyPreset(key) {
+    const p = B.PRESETS[key];
+    state.preset = key;
+    state.cfg = { followers: Object.assign({}, B.FOLLOWERS, p.cfg.followers), herders: Object.assign({}, B.HERDERS, p.cfg.herders),
+      target: Object.assign({}, B.TARGET, p.cfg.target), domain: Object.assign({}, B.DOMAIN, p.cfg.domain) };
+    state.run.init = p.run.init; state.run.n_steps = p.run.n_steps; state.run.box_length = p.run.box_length == null ? (p.cfg.domain.periodic ? 0 : 60) : Math.min(p.run.box_length, 60);
+    $("#box_length").value = state.run.box_length;
+    state.spf = p.run.spf != null ? p.run.spf : key.startsWith("dilorenzo") ? 10 : key.startsWith("hybrid") ? 2 : 1; $("#spf").value = state.spf; $("#spf-v").textContent = state.spf;
+    state.lambda = isH(state.cfg) ? 0 : null; $("#lambda").value = 0; $("#lambda-v").textContent = state.lambda == null ? "—" : "0.00";
+    $("#preset-note").innerHTML = `<b>${p.provenance}.</b> ${p.note}` + (p.run.box_length > 60 ? ` The page starts ${state.run.box_length} m out instead of ${p.run.box_length} m so the drive is visible at once (set the start distance to match the paper).` : "");
+    for (const b of $("#presets").children) b.setAttribute("aria-pressed", b.dataset.key === key);
+    state.view = null;  // a new preset always refits, locked or not
+    state.countNote = null;
+    rebuild(); reset();
+  }
+  $("#lambda").addEventListener("input", (e) => {
+    state.lambda = parseFloat(e.target.value); $("#lambda-v").textContent = state.lambda.toFixed(2);
+    Object.assign(state.cfg.followers, B.sliderParams(state.lambda));
+    buildRows($("#F-controls"), "followers", F_CTRL);
+    if (state.sim) Object.assign(state.sim.F, B.resolve(state.cfg).F);
+    badges();
+  });
+
+  // ---------------------------------------------------------------- simulation control
+  function reset() {
+    if (ff) stopFF();
+    state.playing = false; $("#play").textContent = "Play";
+    state.seed = parseInt($("#seed").value) || 1;
+    state.run.box_length = parseFloat($("#box_length").value) || 60;
+    try {
+      state.sim = B.createSim(state.cfg, state.seed, state.run.init, state.run.box_length);
+    } catch (err) { $("#feas").innerHTML = `<span class="bad">${err.message}</span>`; return; }
+    state.hist = [B.measure(state.sim)];
+    if (!$("#lock-zoom").checked) state.view = null;  // a locked view survives reset, seed and start changes
+    feasibility();
+    draw(); drawCharts();
+  }
+  function tick() {
+    if (!state.sim) return;
+    for (let k = 0; k < state.spf; k++) B.step(state.sim);
+    state.hist.push(B.measure(state.sim));
+    if (state.hist.length > 3000) state.hist = state.hist.filter((_, i) => i % 2 === 0);
+    draw(); drawCharts();
+  }
+  function loop() { if (state.playing) { tick(); requestAnimationFrame(loop); } }
+  // Fast-forward: step in ~40 ms chunks without drawing, record every step for the charts, redraw between chunks.
+  var ff = null;  // var: reset() can run before this line during page load
+  function stopFF(msg) { ff = null; $("#ff-status").textContent = msg || ""; $("#ffend").textContent = "To end"; }
+  function fastForward(tEnd) {
+    if (ff) { stopFF("stopped"); return; }
+    if (!state.sim) return;
+    state.playing = false; $("#play").textContent = "Play";
+    const s = state.sim, wall0 = performance.now(), sim0 = s.t;
+    const run = { tEnd };  // this run's token: a stopped run's pending chunk must not touch a newer run
+    ff = run;
+    $("#ffend").textContent = "Stop";
+    const chunk = () => {
+      if (ff !== run) return;  // stopped, or replaced by a newer run
+      if (state.sim !== s) return stopFF();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 40 && s.t < tEnd - 1e-9) {
+        B.step(s); state.hist.push(B.measure(s));
+        if (state.hist.length > 3000) state.hist = state.hist.filter((_, i) => i % 2 === 0);
+      }
+      draw(); drawCharts();
+      const rate = (s.t - sim0) / Math.max((performance.now() - wall0) / 1000, 1e-3);
+      if (s.t >= tEnd - 1e-9) return stopFF(`done: ${(s.t - sim0).toFixed(0)} s simulated in ${((performance.now() - wall0) / 1000).toFixed(1)} s`);
+      $("#ff-status").textContent = `t = ${s.t.toFixed(0)} / ${tEnd.toFixed(0)} s (${rate.toFixed(0)}× real time)`;
+      setTimeout(chunk, 0);
+    };
+    chunk();
+  }
+  $("#ff60").addEventListener("click", () => { if (ff) return stopFF("stopped"); if (state.sim) fastForward(state.sim.t + 60); });
+  $("#ffend").addEventListener("click", () => {
+    if (ff) return stopFF("stopped");
+    if (!state.sim) return;
+    const end = (state.run.n_steps || 600) * state.sim.F.dt;
+    fastForward(state.sim.t < end - 1e-9 ? end : state.sim.t + 60);
+  });
+  $("#play").addEventListener("click", () => { state.playing = !state.playing; $("#play").textContent = state.playing ? "Pause" : "Play"; if (state.playing) loop(); });
+  $("#step1").addEventListener("click", () => { state.playing = false; $("#play").textContent = "Play"; tick(); });
+  $("#reset").addEventListener("click", reset);
+  $("#seed").addEventListener("change", reset);
+  $("#box_length").addEventListener("change", reset);
+  $("#spf").addEventListener("input", (e) => { state.spf = parseInt(e.target.value); $("#spf-v").textContent = state.spf; });
+  $("#show-design").addEventListener("change", draw);
+  $("#lock-zoom").addEventListener("change", draw);
+
+  // ---------------------------------------------------------------- feasibility panel
+  function feasibility() {
+    const { F, H, T, D } = B.resolve(state.cfg);
+    const el = $("#feas");
+    const N = F.n, M = H.n;
+    let html = "";
+    if (F.rule === "first_order" && D.periodic) {
+      const masses = Array.from({ length: 49 }, (_, i) => 0.02 + i * 0.02);
+      const sc = B.feasibilityScan(F, T, D, masses, Math.min(H.grid, 64));
+      const d = state.sim && state.sim.design ? state.sim.design : B.designHerders(F, Object.assign({}, H, { n: Math.max(M, 1), controller: "dilorenzo" }), T, D);
+      const unit = F.population_scaling ? "mass fraction N_H/(N_T+N_H)" : "dogs";
+      const avail = F.population_scaling ? M / (N + M) : M;
+      const nNeeded = F.population_scaling ? (sc.min_feasible_mass == null ? null : B.herdersFromMass(N, sc.min_feasible_mass)) : sc.min_feasible_mass;
+      html += `<div class="kv">
+        <b>required drift</b><span>v̄ = D∇ln ρ̄_T${(F.g_rep || F.g_att) ? " − M_T (K_g ∗ ρ̄_T)" : ""} (2024 Eq. 9${(F.g_rep || F.g_att) ? "; 2026 Eq. 17" : ""})</span>
+        <b>minimum herder ${unit}</b><span>M̂ = ∫(H − min H) = <b>${d.mass_needed.toFixed(3)}</b>${(F.g_rep || F.g_att) ? ` at the current mass; feasible masses ${sc.min_feasible_mass == null ? "none" : sc.min_feasible_mass.toFixed(2) + " – " + sc.max_feasible_mass.toFixed(2)}` : ""}</span>
+        <b>available</b><span>${avail.toFixed(3)} with ${M} dogs for ${N} sheep → <span class="${d.feasible ? "ok" : "bad"}">${d.feasible ? "feasible (surplus spread uniformly)" : "infeasible: design scaled down"}</span></span>
+        <b>dogs needed (Eq. 12)</b><span>${nNeeded == null ? "—" : nNeeded.toFixed(1)} for N_T = ${N}</span>
+        <b>design drift error</b><span>${d.drift_error.toFixed(3)} (relative, ρ̄-weighted; deconvolution regularized at ${H.reg})</span>
+      </div>
+      <p class="note">Assumptions: first-order followers whose only drift is the herders' push f (plus the pair kernel g), positional Brownian noise D, a periodic domain, and a herder density rather than discrete herders. M̂ is independent of N_T: it is a fraction, so N_H grows with N_T. With pair interactions the required drift carries M_T = 1 − M_H, so the feasible set is an interval in M_H (2026, Theorem 1). Discrete herders leave gaps a continuum does not; the curves above show what the agents actually achieve. For the paper's own case (k = 6/π, D = 0.01, L = π, images → ∞) this calculation gives M̂ = 0.275, i.e. 274 herders for 720 targets, against their 280.</p>`;
+    } else if (F.rule === "first_order") {
+      html += `<p class="note">The deconvolution needs a periodic domain. On the open plane the repository's <code>feasibility.minimum_dogs_local</code> (ring NNLS) is the analogue; it is not computed in the page. Observed resource requirement: read occupancy against N_H.</p>`;
+    } else if (H.controller === "dilorenzo" && H.design_model && D.periodic && M > 0) {
+      const d = state.sim && state.sim.design ? state.sim.design : B.designHerders(F, H, T, D);
+      html += `<div class="kv">
+        <b>herders' design</b><span>from Di Lorenzo's follower model, not from these sheep: M̂ = <b>${d.mass_needed.toFixed(3)}</b>, available ${(M / (N + M)).toFixed(3)} with ${M} herders → <span class="${d.feasible ? "ok" : "bad"}">${d.feasible ? "feasible for their followers" : "infeasible for their followers"}</span></span>
+      </div>
+      <p class="note"><b>The count does not transfer.</b> The design is what the herders believe the followers are. Jadhav's sheep have no additive push and no diffusion, so M̂ says nothing about them. In the experiment (docs/bridge_simulation.md §4.5), 4 herders, a third of the feasibility count, still bring every sheep inside r*. The sheep pack about twice as tight as the target at every count: the herders' ring sets where the flock is, and the sheep's cohesion sets its shape.</p>`;
+    } else {
+      html += `<p class="note"><b>Not applicable as a formula.</b> Di Lorenzo's bound deconvolves an additive push. The Jadhav sheep's response to a dog is a unit vector inside r_dog, normalized together with the social terms, and its speed is fixed: there is no drift to deconvolve, and the transfer of M̂ to these sheep would be unjustified. The observed requirement is what the occupancy and density-error curves show as N_H, w_att and w_ali change. (See docs/continuification_driving.md §15: a unit push confines only through the edge of the notice disc.)</p>`;
+    }
+    html += `<div class="kv"><b>finite-N floor</b><span>E‖ρ̂_b − ρ̄_b‖²/‖ρ̄_b‖² = ${state.sim ? state.sim.metrics.floor.toFixed(4) : "—"} for ${N} independent draws from ρ̄ (= σ²/(N b²) on the plane): residual error at or below this is sampling, not control.</span></div>`;
+    el.innerHTML = html;
+  }
+
+  // ---------------------------------------------------------------- drawing
+  const field = $("#field"), fx = field.getContext("2d");
+  let targetImg = null, designImg = null, imgKey = "";
+  function viewBox() {
+    const s = state.sim, D = s.D, T = s.T;
+    if (D.periodic) return { cx: 0, cy: 0, half: D.size / 2 };
+    let r = T.r_goal * 2;
+    for (let i = 0; i < s.N; i++) r = Math.max(r, Math.hypot(s.x[i] - T.centre[0], s.y[i] - T.centre[1]));
+    for (let m = 0; m < s.M; m++) r = Math.max(r, Math.hypot(s.dx[m] - T.centre[0], s.dy[m] - T.centre[1]));
+    const target = r * 1.15 + 5;
+    const locked = $("#lock-zoom").checked && state.view != null;
+    if (!locked && (state.view == null || target > state.view * 1.02 || target < state.view * 0.7)) state.view = target;  // only re-fit on a real change
+    return { cx: T.centre[0], cy: T.centre[1], half: state.view };
+  }
+  function heat(fn, n, color) {
+    const img = fx.createImageData(n, n);
+    let mx = 0; const vals = new Float64Array(n * n);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = fn(i, j); vals[i * n + j] = v; if (v > mx) mx = v; }
+    for (let q = 0; q < n * n; q++) { const a = mx > 0 ? vals[q] / mx : 0; img.data[4 * q] = color[0]; img.data[4 * q + 1] = color[1]; img.data[4 * q + 2] = color[2]; img.data[4 * q + 3] = Math.round(200 * a); }
+    const c = document.createElement("canvas"); c.width = n; c.height = n; c.getContext("2d").putImageData(img, 0, 0);
+    return c;
+  }
+  function draw() {
+    const s = state.sim; if (!s) return;
+    const W = field.width, vb = viewBox(), sc = W / (2 * vb.half);
+    const px = (x) => (x - vb.cx + vb.half) * sc, py = (y) => W - (y - vb.cy + vb.half) * sc;
+    fx.clearRect(0, 0, W, W);
+    // target density (and designed herder density) as heat maps in view coordinates
+    const key = JSON.stringify([vb.cx, vb.cy, Number(vb.half.toPrecision(2)), s.T, s.D.periodic, s.D.size, state.design === s.design]);
+    if (key !== imgKey) {
+      imgKey = key;
+      const n = 96, dom = s.D;
+      targetImg = heat((i, j) => {
+        const x = vb.cx - vb.half + (j + 0.5) / n * 2 * vb.half, y = vb.cy + vb.half - (i + 0.5) / n * 2 * vb.half;
+        if (s.T.kind === "gaussian") { const dx = B.wrap(x - s.T.centre[0], dom), dy = B.wrap(y - s.T.centre[1], dom); return Math.exp(-(dx * dx + dy * dy) / (2 * s.T.sigma ** 2)); }
+        const w = 2 * Math.PI / dom.size; return Math.exp(s.T.k * (Math.cos(w * (x - s.T.centre[0])) + Math.cos(w * (y - s.T.centre[1])) - 2));
+      }, n, [43, 94, 156]);
+      designImg = s.design ? heat((i, j) => {
+        const x = vb.cx - vb.half + (j + 0.5) / n * 2 * vb.half, y = vb.cy + vb.half - (i + 0.5) / n * 2 * vb.half;
+        return Math.max(0, s.grid.sample(s.design.rho_H, B.wrap(x, dom), B.wrap(y, dom)));
+      }, n, [180, 69, 44]) : null;
+    }
+    fx.imageSmoothingEnabled = true;
+    fx.globalAlpha = 0.55; fx.drawImage(targetImg, 0, 0, W, W);
+    if (designImg && $("#show-design").checked) { fx.globalAlpha = 0.45; fx.drawImage(designImg, 0, 0, W, W); }
+    fx.globalAlpha = 1;
+    // goal circle
+    fx.strokeStyle = "#2b5e9c"; fx.lineWidth = 1.2; fx.setLineDash([4, 4]);
+    fx.beginPath(); fx.arc(px(s.T.centre[0]), py(s.T.centre[1]), s.T.r_goal * sc, 0, 2 * Math.PI); fx.stroke(); fx.setLineDash([]);
+    if (s.D.periodic) { fx.strokeStyle = "#999"; fx.strokeRect(0.5, 0.5, W - 1, W - 1); }
+    // sheep
+    const rad = Math.max(2, Math.min(6, 0.6 * sc));
+    for (let i = 0; i < s.N; i++) {
+      fx.fillStyle = s.active[i] ? "#e0781e" : "#9a9a94";
+      fx.beginPath(); fx.arc(px(s.x[i]), py(s.y[i]), rad, 0, 2 * Math.PI); fx.fill();
+      if (s.F.rule === "heading") { fx.strokeStyle = fx.fillStyle; fx.beginPath(); fx.moveTo(px(s.x[i]), py(s.y[i])); fx.lineTo(px(s.x[i]) + s.hx[i] * rad * 2.2, py(s.y[i]) - s.hy[i] * rad * 2.2); fx.stroke(); }
+    }
+    // dogs
+    for (let m = 0; m < s.M; m++) {
+      const X = px(s.dx[m]), Y = py(s.dy[m]), r = Math.max(3, Math.min(8, 0.9 * sc));
+      fx.fillStyle = s.mode[m] === B.MODE.COLLECT ? "#8a1fb0" : s.mode[m] === B.MODE.HOLD ? "#1f8a6e" : "#1f3d7a";
+      fx.beginPath(); fx.moveTo(X, Y - r); fx.lineTo(X + r, Y + r); fx.lineTo(X - r, Y + r); fx.closePath(); fx.fill();
+    }
+    const m = state.hist[state.hist.length - 1];
+    $("#time").textContent = `t = ${s.t.toFixed(s.F.dt < 1 ? 2 : 0)}  step ${s.step_count}  |  occupancy ${(100 * m.occupancy).toFixed(0)}%  L² error ${m.density_error.toFixed(3)} (floor ${m.floor.toFixed(3)})  cohesion ${m.cohesion.toFixed(2)}`;
+  }
+  function drawChart(id, key, opts = {}) {
+    const c = $(id), g = c.getContext("2d");
+    if (c.width !== c.clientWidth * 2 || c.height !== c.clientHeight * 2) { c.width = c.clientWidth * 2; c.height = c.clientHeight * 2; }
+    const W = c.width, Hh = c.height;
+    g.clearRect(0, 0, W, Hh);
+    const h = state.hist; if (h.length < 2) return;
+    const xs = h.map((m) => m.t), x0 = xs[0], x1 = xs[xs.length - 1] || 1;
+    let ys = h.map((m) => m[key]);
+    const log = opts.log;
+    const tr = (v) => (log ? Math.log10(Math.max(v, 1e-4)) : v);
+    let lo = opts.lo != null ? tr(opts.lo) : Infinity, hi = opts.hi != null ? tr(opts.hi) : -Infinity;
+    for (const v of ys) if (isFinite(v)) { lo = Math.min(lo, tr(v)); hi = Math.max(hi, tr(v)); }
+    if (opts.floor != null) { lo = Math.min(lo, tr(opts.floor)); }
+    if (!(hi > lo)) { hi = lo + 1; }
+    const pad = 0.05 * (hi - lo); lo -= pad; hi += pad;
+    const X = (t) => 8 + (t - x0) / (x1 - x0 || 1) * (W - 16), Y = (v) => Hh - 6 - (tr(v) - lo) / (hi - lo) * (Hh - 12);
+    g.strokeStyle = "#e7e4dc"; g.lineWidth = 1; g.beginPath(); g.moveTo(8, Y(opts.lo != null ? opts.lo : (log ? Math.pow(10, lo + pad) : lo + pad))); g.lineTo(W - 8, Y(opts.lo != null ? opts.lo : (log ? Math.pow(10, lo + pad) : lo + pad))); g.stroke();
+    if (opts.floor != null) { g.strokeStyle = "#555"; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(8, Y(opts.floor)); g.lineTo(W - 8, Y(opts.floor)); g.stroke(); g.setLineDash([]); }
+    if (opts.second) {
+      g.strokeStyle = "#b5b3ab"; g.lineWidth = 2; g.beginPath();
+      h.forEach((m, i) => { const v = m[opts.second]; if (!isFinite(v)) return; const yy = Hh - 6 - v * (Hh - 12); i ? g.lineTo(X(m.t), yy) : g.moveTo(X(m.t), yy); });
+      g.stroke();
+    }
+    g.strokeStyle = opts.color || "#b4452c"; g.lineWidth = 2.5; g.beginPath();
+    let started = false;
+    h.forEach((m) => { const v = m[key]; if (!isFinite(v)) return; started ? g.lineTo(X(m.t), Y(v)) : g.moveTo(X(m.t), Y(v)); started = true; });
+    g.stroke();
+    g.fillStyle = "#6b6b66"; g.font = "20px ui-monospace, monospace";
+    g.fillText(log ? Math.pow(10, hi - pad).toExponential(1) : (hi - pad).toFixed(2), 12, 24);
+    g.fillText(log ? Math.pow(10, lo + pad).toExponential(1) : (lo + pad).toFixed(2), 12, Hh - 10);
+    const last = ys[ys.length - 1]; if (isFinite(last)) g.fillText(last.toFixed(3), W - 110, 24);
+  }
+  function drawCharts() {
+    const fl = state.sim ? state.sim.metrics.floor : null;
+    drawChart("#c-err", "density_error", { log: true, floor: fl, color: "#b4452c" });
+    drawChart("#c-occ", "occupancy", { lo: 0, hi: 1, color: "#2f7d4f" });
+    drawChart("#c-coh", "cohesion", { lo: 0, color: "#c98a1a" });
+    drawChart("#c-cen", "centroid_error", { lo: 0, color: "#2b5e9c", second: "active_fraction" });
+  }
+
+  // ---------------------------------------------------------------- start
+  applyPreset("jadhav_reference");
+  window.addEventListener("resize", drawCharts);
+})();
+</script>
+</body>
+</html>

@@ -16,7 +16,8 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 # Dog behaviour modes recorded per step. REPLAY: the dog follows a given path.
-INIT, DRIVE, COLLECT, SLOW, REPLAY = 0, 1, 2, 3, 4
+# HOLD: reach-and-release, the dog has withdrawn beyond the sheep's notice radius.
+INIT, DRIVE, COLLECT, SLOW, REPLAY, HOLD = 0, 1, 2, 3, 4, 5
 
 # Float parameters that `simulate` accepts per run (see `per_run`).
 PER_RUN_FIELDS = (
@@ -75,6 +76,14 @@ class Params:
     # It acts where the other social terms act (sheep that see the dog, or all with social_always).
     pair_kernel: tuple | None = None
     g_pairk: float = 1.0
+    # Reach-and-release (only in `simulate`). When the flock's centroid comes within
+    # hold_radius of the target the dog withdraws to hold_standoff from the centroid
+    # (default r_dog + 3 m, so no sheep sees it and the published sheep stop) and waits
+    # there; it re-engages when the centroid drifts beyond hold_release (default
+    # 2 * hold_radius). Off by default, so the published model is unchanged.
+    hold_radius: float | None = None
+    hold_release: float | None = None
+    hold_standoff: float | None = None
 
     def resolved(self):
         n = self.n_sheep
@@ -225,6 +234,11 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
     P_s[..., 0], V_s[..., 0], P_d[..., 0], V_d[..., 0] = pos_s, vel_s, pos_d, vel_d
     flanking = bool(np.any(f["flank_sigma"] > 0))
     flank = np.zeros(R)
+    hold_on = p.hold_radius is not None
+    holding = np.zeros(R, dtype=bool)
+    if hold_on:
+        hold_release = 2 * p.hold_radius if p.hold_release is None else p.hold_release
+        hold_standoff = f["r_dog"] + 3.0 if p.hold_standoff is None else np.full(R, float(p.hold_standoff))
     if p.dog_kernel is not None:
         from .kernels import HatBasis
 
@@ -318,13 +332,16 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
             continue
 
         min_d = np.linalg.norm(pos_s - pos_d[:, None], axis=-1).min(-1)
-        slow = min_d <= f["r_rep"]
         G = pos_s.mean(1)
+        if hold_on:  # hysteresis: enter below hold_radius, leave above hold_release
+            dist_t = np.linalg.norm(G - target, axis=-1)
+            holding = np.where(holding, dist_t <= hold_release, dist_t <= p.hold_radius)
+        slow = (min_d <= f["r_rep"]) & ~holding
         from_g = pos_s - G[:, None]
         spread = np.linalg.norm(from_g, axis=-1)
         far = spread.argmax(-1)
-        collect = ~slow & (spread.max(-1) >= f["l_sep"])
-        drive = ~slow & ~collect
+        collect = ~slow & ~holding & (spread.max(-1) >= f["l_sep"])
+        drive = ~slow & ~collect & ~holding
 
         far_vec = from_g[np.arange(R), far]
         far_dist = spread[np.arange(R), far]
@@ -336,14 +353,25 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
             side = np.stack([-away_t[:, 1], away_t[:, 0]], -1) / g_norm
             p_drive = p_drive + flank[:, None] * side
         aim = np.where(collect[:, None], p_collect, p_drive)
+        if hold_on:  # withdraw radially from the centroid to the standoff distance
+            od = pos_d - G
+            on = np.linalg.norm(od, axis=-1, keepdims=True)
+            out_dir = np.where(on > 1e-9, od / np.maximum(on, 1e-9), away_t / g_norm)
+            aim = np.where(holding[:, None], G + hold_standoff[:, None] * out_dir, aim)
         th_d = 2 * np.pi * d["noise_d"]
-        dog_dir = _unit(_unit(aim - pos_d) + c2["noise_dog"] * np.stack([np.cos(th_d), np.sin(th_d)], -1))
+        with np.errstate(invalid="ignore", divide="ignore"):  # a holding dog can sit exactly on its aim
+            dog_dir = _unit(_unit(aim - pos_d) + c2["noise_dog"] * np.stack([np.cos(th_d), np.sin(th_d)], -1))
         if relax_d:
             dog_dir = _unit((1 - a_d[:, None]) * vel_d + a_d[:, None] * dog_dir)
 
         v_dog = c2["v_dog"]
         if p.dog_speed_gain is not None or "dog_speed_gain" in (per_run or {}):
             v_dog = np.minimum(v_dog, c2["dog_speed_gain"] * np.linalg.norm(aim - pos_d, axis=-1, keepdims=True))
+        if hold_on:  # no heading noise while holding; stop at the standoff point
+            to_aim = aim - pos_d
+            dist_aim = np.linalg.norm(to_aim, axis=-1, keepdims=True)
+            dog_dir = np.where(holding[:, None], to_aim / np.maximum(dist_aim, 1e-9), dog_dir)
+            v_dog = np.where(holding[:, None], np.minimum(c2["v_dog"], dist_aim / dt), v_dog)
         new_pos_d = np.where(slow[:, None], pos_d + c2["dog_slow_step"] * dt * vel_d, pos_d + v_dog * dt * dog_dir)
         vel_d = np.where(slow[:, None], vel_d, dog_dir)
         if p.dog_kernel is not None:
@@ -351,7 +379,7 @@ def simulate(params=Params(), n_runs=1, seed=None, per_run=None, init=None, dog_
 
         pos_s, vel_s, pos_d = new_pos_s, new_v, new_pos_d
         P_s[..., t], V_s[..., t], P_d[..., t], V_d[..., t] = pos_s, vel_s, pos_d, vel_d
-        mode[:, t] = np.select([slow, collect, drive], [SLOW, COLLECT, DRIVE])
+        mode[:, t] = np.select([holding, slow, collect, drive], [HOLD, SLOW, COLLECT, DRIVE])
 
     return Result(p, P_s, V_s, P_d, V_d, mode)
 
