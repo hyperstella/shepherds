@@ -10,3 +10,6 @@ results/video/
 runs/
 data/finetune/
 models/
+checkpoints/
+.ipynb_checkpoints/
+*.log

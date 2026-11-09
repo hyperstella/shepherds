@@ -119,7 +119,7 @@ def run_config(model_name, imgsz, frames, gt):
             r = model.predict(str(path), conf=0.01, imgsz=imgsz, classes=keep, verbose=False)[0]
             preds = [(*b, c) for b, c in zip(r.boxes.xyxy.cpu().numpy().tolist(), r.boxes.conf.cpu().numpy().tolist())]
             g = gt[vid][f]
-            res, missed = match(preds, g)
+            res, _ = match(preds, g)
             scored += [(c, h) for c, h, _ in res]
             n_pos += sum(1 for x in g if x[4] in FLOCK)
             for c, h, cls in res:

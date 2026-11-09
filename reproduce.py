@@ -92,7 +92,7 @@ def analyse_data(sessions):
     indeg, di, indeg_dog, nets = [], [], [], []
     for d in drives:
         ux, uy = np.cos(d.phi[:, 1:]), np.sin(d.phi[:, 1:])
-        k, edges = NW.leader_follower(ux[:N], uy[:N])
+        k, _ = NW.leader_follower(ux[:N], uy[:N])
         indeg.append(k)
         di.append(NW.front_back_position(d.pos[:N, :, 1:], ux[:N], uy[:N], N))
         kd, edges_d = NW.leader_follower(ux[: N + 1], uy[: N + 1])
@@ -110,7 +110,7 @@ def analyse_data(sessions):
 def analyse_model(res):
     """Observables pooled over runs; also split by the dog's DRIVE mode."""
     p = res.params
-    N, R, T = p.n_sheep, *res.mode.shape
+    N, R, _ = p.n_sheep, *res.mode.shape
     keys = ["C", "P", "dBD", "E", "xD", "yRD", "psi_BD", "psi_DB", "phi_BD"]
     acc = {k: [] for k in keys}
     drive_mask = []

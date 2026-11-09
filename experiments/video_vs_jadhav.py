@@ -24,7 +24,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from shepherd import data, video as V  # noqa: E402
+from shepherd import data  # noqa: E402
 
 MIN_SHEEP = 8
 MOVING = 0.2  # m/s; slower sheep have no meaningful heading

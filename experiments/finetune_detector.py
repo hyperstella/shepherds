@@ -122,7 +122,7 @@ def evaluate(a):
     from ultralytics import YOLO
 
     yaml = _split(a)
-    imgsz, conf = weights.defaults(a.model)
+    imgsz, _ = weights.defaults(a.model)
     model = YOLO(weights.resolve(a.model))
     kinds = V.class_kinds(model.names)
     # A single-class sheep model is scored on sheep only; its missing dog class is reported, not hidden.

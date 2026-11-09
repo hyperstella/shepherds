@@ -74,7 +74,7 @@ def main(argv=None):
     for note in tracks.notes:
         print("note:", note)
     flock = V.flock_series(tracks)
-    lab, segs = V.label_phases(flock)
+    _, segs = V.label_phases(flock)
 
     V.write_tracks(tracks, out / f"{name}_tracks.csv", a.offset)
     V.write_flock(flock, out / f"{name}_flock.csv", a.offset)

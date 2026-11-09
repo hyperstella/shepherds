@@ -29,7 +29,7 @@ def _pooled(drives, window_s=1.1):
     for d in drives:
         pos, vel = smooth_drive(d.pos[: N + 1], window_s=window_s)
         xb, yb = M.flock_frame(pos, vel, N)
-        psi_bd, psi_db, _ = M.viewing_angles(pos, vel, N)
+        _, psi_db, _ = M.viewing_angles(pos, vel, N)
         phi_d = np.unwrap(np.arctan2(vel[N, 1], vel[N, 0]))
         rows.append({"xD": xb[N], "yD": yb[N], "psi_db": psi_db, "phi_d": phi_d,
                      "speed_d": np.linalg.norm(vel[N], axis=0), "T": pos.shape[-1]})

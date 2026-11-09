@@ -148,11 +148,11 @@ def main():
         print(f"{dt:8s} {name:32s} held-out RMS z = {res['heldout'][f'{dt} | {name}']['rms_z']:.2f}")
 
     # ---- posteriors on all data ----
-    post1, draws1 = posterior_all(m1, "M1")
+    post1, _ = posterior_all(m1, "M1")
     post1t, draws1t = posterior_all(m1t, "M1tau")
     res["posteriors"]["M1"] = post1.summary(MODELS["M1"]["priors"])
     res["posteriors"]["M1tau"] = post1t.summary(MODELS["M1tau"]["priors"])
-    post2, draws2 = posterior_all(m2, "M2")
+    post2, _ = posterior_all(m2, "M2")
     post2t, draws2t = posterior_all(m2t, "M2tau")
     for name, post in (("M2", post2), ("M2tau", post2t)):
         res["posteriors"][name] = {k: v for k, v in post.summary(MODELS[name]["priors"]).items() if k not in WEIGHTS}

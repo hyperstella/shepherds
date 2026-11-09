@@ -36,9 +36,9 @@ import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from shepherd import abc as ABC, data, dog_policy as DP, protocol as PR  # noqa: E402
+from shepherd import data, dog_policy as DP, protocol as PR  # noqa: E402
 from shepherd.model import COLLECT, Params, simulate  # noqa: E402
-from build_table import FIT_STATS, MODELS, V_SHEEP  # noqa: E402
+from build_table import FIT_STATS, V_SHEEP  # noqa: E402
 
 TABLES, OUT = ROOT / "results" / "tables", ROOT / "results"
 COLS = [PR.SUMMARY_KEYS.index(k) for k in FIT_STATS]
