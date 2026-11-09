@@ -82,3 +82,51 @@ def test_pair_kernel_pulls_straggler_back():
     on = simulate(replace(base, pair_kernel=(PAIR_KNOTS, coef), g_pairk=1.0), 1, seed=0, init=init)
     gap = lambda r: np.linalg.norm(r.pos_s[0, 4, :, -1] - r.pos_s[0, :4, :, -1].mean(0))
     assert gap(on) < gap(off) - 0.5
+
+
+def test_hold_withdraws_and_freezes_the_flock():
+    from shepherd.model import HOLD
+
+    rng = np.random.default_rng(0)
+    init = {"pos_s": rng.normal(0, 1.5, (1, 14, 2)), "pos_d": np.array([[-9.0, 0.0]])}
+    p = Params(n_steps=80, hold_radius=5.0)
+    r = simulate(p, 2, seed=1, init=init)
+    assert (r.mode[:, 1] == HOLD).all()  # the centroid starts inside hold_radius
+    d = np.linalg.norm(r.pos_s[..., -1] - r.pos_d[:, None, :, -1], axis=-1)
+    assert (d.min(-1) > p.r_dog).all()  # no sheep sees the dog at the end
+    np.testing.assert_array_equal(r.pos_s[..., -1], r.pos_s[..., -2])  # and the flock is frozen
+    g = r.pos_s[..., -1].mean(1)
+    np.testing.assert_allclose(np.linalg.norm(r.pos_d[..., -1] - g, axis=-1), p.r_dog + 3.0, atol=0.3)
+
+
+def test_hold_matches_published_model_until_the_flock_arrives():
+    from dataclasses import replace
+
+    from shepherd.model import HOLD
+
+    q = Params(n_steps=70, box_length=25.0)
+    a = simulate(q, 3, seed=7)
+    b = simulate(replace(q, hold_radius=5.0), 3, seed=7)
+    held = 0
+    for r in range(3):
+        t_hold = np.flatnonzero(b.mode[r] == HOLD)
+        t0 = int(t_hold[0]) if len(t_hold) else q.n_steps
+        held += len(t_hold) > 0
+        for f in FIELDS:
+            np.testing.assert_array_equal(getattr(a, f)[r][..., :t0], getattr(b, f)[r][..., :t0], err_msg=f)
+        if len(t_hold):  # the dog only holds once the centroid is within hold_radius of the target
+            assert np.linalg.norm(b.pos_s[r, :, :, t0 - 1].mean(0)) <= 5.0
+    assert held > 0
+
+
+def test_hold_reengages_when_the_flock_wanders():
+    from shepherd.model import HOLD
+
+    rng = np.random.default_rng(3)
+    init = {"pos_s": rng.normal(0, 1.0, (1, 14, 2)), "pos_d": np.array([[-8.0, 0.0]])}
+    r = simulate(Params(n_steps=300, social_always=True, hold_radius=3.0, hold_release=4.0), 4, seed=2, init=init)
+    reengaged = 0
+    for m in r.mode:
+        t_hold = np.flatnonzero(m == HOLD)
+        reengaged += len(t_hold) > 0 and bool((m[t_hold[0]:] != HOLD).any())
+    assert reengaged > 0

@@ -1,0 +1,112 @@
+{
+ "setup": {
+  "start_m": 250.0,
+  "steps": 500,
+  "runs": 300,
+  "seed": 2024,
+  "rho_min": 10.0,
+  "delta": 0.01,
+  "link_m": 5.0
+ },
+ "exact": {
+  "steps": 149700,
+  "identity_residual_max": 5.7510274320549115e-11,
+  "speed_limit_violations": 0,
+  "lower_violations": 0,
+  "upper_violations": 0,
+  "steps_with_rho_above_vp": 149347
+ },
+ "drive": {
+  "runs": 300,
+  "steps": 86600,
+  "window_median": 288.0,
+  "window_min": 275,
+  "window_max": 340,
+  "slope_median": 0.8366037809065852,
+  "slope_min": 0.8048061665749774,
+  "slope_max": 0.8609465863714452,
+  "predicted_median": 0.8335774359194315,
+  "rmse_median": 0.5587674728199987,
+  "largest_miss_median": 1.5173752708458608,
+  "largest_miss_max": 4.1160076493680435,
+  "exp_over_linear_rmse_median": 54.23123547402376,
+  "E_max_median": 0.0399682628108593,
+  "E_max": 0.09046147272044891,
+  "E_min": 2.459380932240407e-08,
+  "running_p_min": 0.7044541725081184,
+  "running_p_max": 0.8724867001883719,
+  "burn_in_s": 30
+ },
+ "expected_alignment": {
+  "min": 0.3830180252847928,
+  "p01": 0.5602024975626326,
+  "p1": 0.6624591812587716,
+  "median": 0.842791818325346,
+  "share_at_least": {
+   "0.5": 0.9997690531177829,
+   "0.6": 0.9977251732101616,
+   "0.7": 0.9766050808314087,
+   "0.75": 0.9240069284064665,
+   "0.8": 0.7731639722863741
+  },
+  "surprise_mean": -5.0235216307044185e-05,
+  "surprise_se": 0.00017570665691697535,
+  "surprise_sd": 0.05170674052844345,
+  "hoeffding_proxy_sd": 0.2672612419124244,
+  "running_m_min": 0.7324143848152456
+ },
+ "band": {
+  "0.65": {
+   "slope_c": 0.5944444444444444,
+   "assumption_held_runs": 300,
+   "upper_broken": 0,
+   "lower_broken": 0
+  },
+  "0.7": {
+   "slope_c": 0.6444444444444444,
+   "assumption_held_runs": 300,
+   "upper_broken": 0,
+   "lower_broken": 0
+  },
+  "0.75": {
+   "slope_c": 0.6944444444444444,
+   "assumption_held_runs": 297,
+   "upper_broken": 0,
+   "lower_broken": 0
+  },
+  "0.8": {
+   "slope_c": 0.7444444444444445,
+   "assumption_held_runs": 157,
+   "upper_broken": 0,
+   "lower_broken": 0
+  }
+ },
+ "fluctuation_m": {
+  "T=240": 12.565490409605088,
+  "T=340": 14.955925071622719
+ },
+ "startup": {
+  "dog_in_position_median_s": 20.0,
+  "dog_in_position_max_s": 99.0,
+  "closing_speed_by_time": {
+   "0-10s": 0.02021352446369312,
+   "10-20s": 0.22283066634557674,
+   "20-30s": 0.5081747718010401,
+   "30-50s": 0.7444197290869229,
+   "50-100s": 0.8256144362847598,
+   "100-200s": 0.8385096116444882
+  }
+ },
+ "cohesion": {
+  "farthest_sheep_p99": 6.883821188605244,
+  "farthest_sheep_max": 11.002361997339495,
+  "steps_with_a_sheep_unlinked": 101,
+  "alignment_by_farthest_sheep": {
+   "0-4m": 0.8339017585910694,
+   "4-6m": 0.8337432123387697,
+   "6-8m": 0.8250277906075804,
+   "8-12m": 0.7601404499123324
+  },
+  "runs_ever_below_90pct_linked_whole_500s": 43
+ }
+}

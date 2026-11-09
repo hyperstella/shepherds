@@ -1,0 +1,201 @@
+{
+ "first_order_look": {
+  "dt": 0.1,
+  "D": 0.1459025044449664,
+  "follower_step_speed_mean": 2.1374234243165158,
+  "follower_step_speed_brownian": 2.140948939383325,
+  "max_design_drift": 0.0729512522224832,
+  "push_per_herder_at_contact": 0.07639437268410976,
+  "herder_speed_first_0p2s_max": 9.04968925275587,
+  "herder_speed_after_10s_max": 0.2245450517289032,
+  "occupancy": {
+   "0": 0.08333333333333333,
+   "50": 0.4722222222222222,
+   "100": 0.75,
+   "150": 0.8611111111111112,
+   "200": 0.7777777777777778
+  },
+  "drift_equals_diffusion_after_s": 109.66227112321508
+ },
+ "hybrid_a": {
+  "seeds": [
+   {
+    "seed": 0,
+    "final_occupancy": 0.0,
+    "groups_mean": 3.098360655737705,
+    "split_fraction": 1.0,
+    "secondary_size": 15.8671875,
+    "secondary_distance": 24.58389617204929,
+    "secondary_inside_goal": 0.0,
+    "notice_cover_of_box": 0.9384722222222223
+   },
+   {
+    "seed": 1,
+    "final_occupancy": 0.016666666666666666,
+    "groups_mean": 3.7868852459016393,
+    "split_fraction": 1.0,
+    "secondary_size": 12.358823529411765,
+    "secondary_distance": 24.827448846623778,
+    "secondary_inside_goal": 0.0,
+    "notice_cover_of_box": 0.9388888888888889
+   },
+   {
+    "seed": 2,
+    "final_occupancy": 0.16666666666666666,
+    "groups_mean": 4.065573770491803,
+    "split_fraction": 1.0,
+    "secondary_size": 12.085561497326204,
+    "secondary_distance": 39.0725196871316,
+    "secondary_inside_goal": 0.0053475935828877,
+    "notice_cover_of_box": 0.9240277777777778
+   },
+   {
+    "seed": 3,
+    "final_occupancy": 0.0,
+    "groups_mean": 4.032786885245901,
+    "split_fraction": 1.0,
+    "secondary_size": 13.92972972972973,
+    "secondary_distance": 22.697669279235,
+    "secondary_inside_goal": 0.0,
+    "notice_cover_of_box": 0.9277777777777778
+   }
+  ],
+  "bands": {
+   "10-20": {
+    "unseen": 0.12476325757575757,
+    "jad_goalward": 0.5108337402621129,
+    "jad_cos": 0.074414576838412,
+    "des_goalward": 0.8864820075757576,
+    "des_cos": 0.5860549855423471
+   },
+   "20-30": {
+    "unseen": 0.047491544532130774,
+    "jad_goalward": 0.588407920521014,
+    "jad_cos": 0.13278961254225924,
+    "des_goalward": 0.8154594137542278,
+    "des_cos": 0.5791142449040525
+   },
+   "30-40": {
+    "unseen": 0.016335227272727272,
+    "jad_goalward": 0.4943895043360952,
+    "jad_cos": -0.014905722372801774,
+    "des_goalward": 0.612114448051948,
+    "des_cos": 0.16030977327239151
+   },
+   "40-57": {
+    "unseen": 0.04473514211886305,
+    "jad_goalward": 0.5267795078984194,
+    "jad_cos": 0.025037252775196413,
+    "des_goalward": 0.5370639534883721,
+    "des_cos": 0.010519542113719586
+   }
+  }
+ },
+ "hybrid_b": {
+  "l_sep": 27.144176165949062,
+  "dog_speed": 1.5,
+  "cut_off_m": 12.0,
+  "flock_pull_m_s": {
+   "5": 2.528150618647628,
+   "10": 0.8185799897508639,
+   "15": 0.23516216344406596,
+   "20": 0.06737936693317355,
+   "27": 0.011708796113935304
+  },
+  "dog_push_m_s": {
+   "5": 0.8461227146943173,
+   "10": 0.3112711514442092,
+   "15": 0.11451025724608706,
+   "20": 0.042125969444088605,
+   "27": 0.01038813616800913
+  },
+  "sheep_outruns_dog_within_m": 2.1372200741346976,
+  "seeds": [
+   {
+    "seed": 0,
+    "cut_off_fraction": 1.0,
+    "max_out": 15,
+    "collecting": 0.7611194402798601,
+    "driving": 0.22988505747126436,
+    "dog_between": 0.68015992003998,
+    "dog_far": 0.14042978510744628,
+    "target_switches": 0,
+    "farthest_while_driving_median": 25.392439454888112,
+    "farthest_while_driving_p90": 26.759598383628063
+   },
+   {
+    "seed": 1,
+    "cut_off_fraction": 0.4292853573213393,
+    "max_out": 9,
+    "collecting": 0.5168800931315483,
+    "driving": 0.47729918509895225,
+    "dog_between": 0.34342258440046564,
+    "dog_far": 0.33643771827706637,
+    "target_switches": 0,
+    "farthest_while_driving_median": 3.061997376592468,
+    "farthest_while_driving_p90": 16.674219850199858
+   },
+   {
+    "seed": 2,
+    "cut_off_fraction": 1.0,
+    "max_out": 11,
+    "collecting": 0.7806096951524237,
+    "driving": 0.2143928035982009,
+    "dog_between": 0.5272363818090955,
+    "dog_far": 0.17691154422788605,
+    "target_switches": 6,
+    "farthest_while_driving_median": 24.99470070091461,
+    "farthest_while_driving_p90": 26.651907428212418
+   },
+   {
+    "seed": 3,
+    "cut_off_fraction": 1.0,
+    "max_out": 18,
+    "collecting": 0.7976011994002998,
+    "driving": 0.1809095452273863,
+    "dog_between": 0.383808095952024,
+    "dog_far": 0.2988505747126437,
+    "target_switches": 15,
+    "farthest_while_driving_median": 26.72696416955352,
+    "farthest_while_driving_p90": 27.049436975153142
+   }
+  ]
+ },
+ "multi_dog": {
+  "spread_angle_deg": 28.64788975654116,
+  "counts": {
+   "1": {
+    "arc_median_deg": 0.0,
+    "arc_p90_deg": 0.0,
+    "dogs_on_far_side": 0.5480865224625624,
+    "goal_crossings": 7.8,
+    "occupancy_last_half": 0.14319047619047617,
+    "cohesion_last_half": 3.139929928282915
+   },
+   "2": {
+    "arc_median_deg": 30.36321826552176,
+    "arc_p90_deg": 103.00050570958399,
+    "dogs_on_far_side": 0.5562396006655574,
+    "goal_crossings": 9.8,
+    "occupancy_last_half": 0.1268095238095238,
+    "cohesion_last_half": 4.802748914765656
+   },
+   "4": {
+    "arc_median_deg": 83.5275784351226,
+    "arc_p90_deg": 145.18507320409444,
+    "dogs_on_far_side": 0.5934276206322795,
+    "goal_crossings": 10.4,
+    "occupancy_last_half": 0.09680952380952382,
+    "cohesion_last_half": 5.698202520225934
+   },
+   "6": {
+    "arc_median_deg": 184.27216472850975,
+    "arc_p90_deg": 255.874990715195,
+    "dogs_on_far_side": 0.8026622296173045,
+    "goal_crossings": 3.2,
+    "occupancy_last_half": 0.028809523809523806,
+    "cohesion_last_half": 13.41893336489647
+   }
+  }
+ }
+}

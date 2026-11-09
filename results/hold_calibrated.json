@@ -1,0 +1,86 @@
+{
+ "setup": {
+  "seed": 11,
+  "runs": 64,
+  "dt": 0.2,
+  "seconds": 450.0,
+  "start_m": 100.0,
+  "hold_radius": 5.0,
+  "hold_release": 10.0,
+  "per_run_keys": [
+   "noise",
+   "r_dog",
+   "r_rep",
+   "tau_s",
+   "w_ali",
+   "w_att",
+   "w_dog",
+   "w_inertia",
+   "w_rep"
+  ],
+  "r_dog_median": 6.73100014732065
+ },
+ "results": {
+  "calibrated/published_dog": {
+   "label": "calibrated/published_dog",
+   "success_rate": 0.0,
+   "t_reach_median_s": null,
+   "n_scored": 0,
+   "post_rho_mean": null,
+   "post_rho_p90": null,
+   "post_inside_frac": null,
+   "post_sheep_moving_frac": null,
+   "post_maxspread_median": null,
+   "post_hold_frac": null,
+   "post_slow_frac": null,
+   "hold_episodes_mean": null,
+   "reengagements_mean": null,
+   "final_rho_median": null
+  },
+  "calibrated/hold_rule": {
+   "label": "calibrated/hold_rule",
+   "success_rate": 0.0,
+   "t_reach_median_s": null,
+   "n_scored": 0,
+   "post_rho_mean": null,
+   "post_rho_p90": null,
+   "post_inside_frac": null,
+   "post_sheep_moving_frac": null,
+   "post_maxspread_median": null,
+   "post_hold_frac": null,
+   "post_slow_frac": null,
+   "hold_episodes_mean": null,
+   "reengagements_mean": null,
+   "final_rho_median": null
+  }
+ },
+ "at_goal": {
+  "calibrated/published_dog": {
+   "label": "calibrated/published_dog",
+   "rho_mean": 156.0874203513554,
+   "rho_p90": 321.00494288677777,
+   "rho_final_median": 365.68687177030694,
+   "inside_frac": 0.11112425595238096,
+   "inside_final": 0.07366071428571429,
+   "sheep_moving_frac": 0.8884725233488993,
+   "maxspread_median": 3.489579961342156,
+   "hold_frac": 0.0,
+   "slow_frac": 0.017125,
+   "reengagements_mean": null
+  },
+  "calibrated/hold_rule": {
+   "label": "calibrated/hold_rule",
+   "rho_mean": 0.7095300639235937,
+   "rho_p90": 1.174040600403252,
+   "rho_final_median": 0.7286878932705899,
+   "inside_frac": 0.9464412202380953,
+   "inside_final": 0.9464285714285714,
+   "sheep_moving_frac": 0.0012850829124178024,
+   "maxspread_median": 4.942573415639121,
+   "hold_frac": 0.9993333333333333,
+   "slow_frac": 0.0,
+   "reengagements_mean": 0.0
+  }
+ },
+ "seconds": 12.942564249038696
+}

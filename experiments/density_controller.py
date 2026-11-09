@@ -140,7 +140,7 @@ def part_a(quick=False, only=None):
         p = C.base(n_steps=1, social_always=(sheep == "always_moving"))
         st = simulate(p, n_runs=Rk, seed=SEED)
         init = dict(pos_s=st.pos_s[..., 0], vel_s=st.vel_s[..., 0], pos_d=st.pos_d[..., 0])
-        pos, dog, rec = DC.run(controller(kind), params_for(kind, p), init, Tk, SEED)
+        pos, _, rec = DC.run(controller(kind), params_for(kind, p), init, Tk, SEED)
         rho = np.linalg.norm(pos.mean(1), axis=1)[:, :Tk]  # (R, T), the centroid's distance to the goal
         t_reach = C.first_true(rho < C.ARRIVE, Tk)
         t = np.arange(Tk)[None]
@@ -202,7 +202,7 @@ def part_b(quick=False, only=None):
         x, h = x[:R], h[:R]
         init = dict(pos_s=x, vel_s=h, pos_d=np.tile(np.array([[-ring["r_ring"], 0.0]]), (R, 1)))
         p = params_for(kind, Params(n_steps=T + 1))
-        pos, dog, rec = DC.run(controller(kind), p, init, T, SEED + 3)
+        pos, _, rec = DC.run(controller(kind), p, init, T, SEED + 3)
         m = TD.metrics(pos, S_GOAL, grid, floor)
         m.update(runs=R, steps=T, diagnostics=diagnostics(rec), seconds=fl(time.time() - tic),
                  released_frac_series=rec["released"].mean(0).tolist(), coverage_series=rec["coverage"].mean(0).tolist(),
@@ -224,7 +224,7 @@ def part_c():
     for kind in ("moment", "l2"):
         ctrl = DC.Controller(functional(kind), radii=tuple(np.arange(2.0, 18.1, 1.0)), n_angles=36)
         resp = DC.ExpectedResponse(pos, hd)
-        h, s, sc = ctrl.place(resp, dog)
+        h, _, sc = ctrl.place(resp, dog)
         cand = ctrl.candidates(c, dog)
         out[kind] = dict(cand=(cand[0] - c[0]).round(2).tolist(), score=sc[0].round(5).tolist(), h_star=(h[0] - c[0]).round(2).tolist(),
                          V=fl(ctrl.functional.value(pos)[0]))
