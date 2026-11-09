@@ -1,0 +1,4 @@
+# Recreated locally; keep the repository source-only.
+output/
+__pycache__/
+*.py[cod]
